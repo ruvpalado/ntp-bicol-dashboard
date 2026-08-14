@@ -51,7 +51,7 @@ function referenceSlotSkeleton(slot) {
   </div>`;
 }
 
-function adminPageHtml({ updatedAt, source, storageWarning, provinces, categories, slots, referenceSlots, signedInAs }) {
+function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, provinces, categories, slots, referenceSlots, signedInAs }) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -144,6 +144,23 @@ function adminPageHtml({ updatedAt, source, storageWarning, provinces, categorie
     <div class="status-row"><span>Source</span><b id="sourceLabel">${source === "provincial-uploads" ? "Consolidated from provincial uploads" : "No provincial files uploaded yet"}</b></div>
     <div class="status-row"><span>Last updated</span><b id="updatedLabel">${fmtDate(updatedAt)}</b></div>
   </div>
+
+  ${dataQualityIssues && dataQualityIssues.length ? `
+  <div class="card">
+    <h2>Data Quality Issues (${dataQualityIssues.length})</h2>
+    <div class="standings-hint">
+      Rows the pipeline could not confidently attribute to a province or municipality on the last
+      consolidation - most often a facility name in an uploaded sheet (Screening Presumptive, Sputum
+      Examination, Stool Base, GenXpert, Parago, etc.) that has no match in the Facility List roster
+      or the built-in reference list. Those rows are excluded from that module's figures rather than
+      guessed, so a province can look like it has no Laboratory/Screening data when really it just has
+      an unmatched facility name somewhere in that sheet. Add the missing facility (with the exact
+      spelling used in the province's file) to the Facility List and re-upload to fix.
+    </div>
+    <ul style="font-size:12px;color:var(--red);line-height:1.7;margin:0;padding-left:20px;">
+      ${dataQualityIssues.map((m) => `<li>${String(m).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</li>`).join("")}
+    </ul>
+  </div>` : ""}
 
   <div class="card">
     <h2>Province &amp; City Data Uploads</h2>
@@ -805,13 +822,20 @@ module.exports = async (req, res) => {
       : "No Blob store is connected yet, so uploads and Awardee Recognition assignments can't persist across requests. Connect a Vercel Blob store to this project (Storage tab in the Vercel dashboard) before using this page - see the README.";
     const ops = (kpi && kpi.meta && kpi.meta.operational_provinces) || Object.keys(PROVINCE_LABELS);
     const provinces = ops.map((p) => ({ key: p, label: PROVINCE_LABELS[p] || p }));
+    // Surfaces the pipeline's own facility->province attribution warnings (data_quality_issues,
+    // computed by vendor/ntp_pipeline_browser.js on every consolidation) directly on the admin page.
+    // Previously these were computed and returned in the kpi payload but never displayed anywhere, so
+    // a province could silently show zero Laboratory/Screening data with no way for an admin to tell
+    // why short of asking a developer to dig through the pipeline - this makes the exact unresolved
+    // facility/province named right where uploads happen.
+    const dataQualityIssues = (kpi && Array.isArray(kpi.data_quality_issues)) ? kpi.data_quality_issues : [];
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     // Mirrors GET / (api/index.js) - without this, a browser or intermediary could serve a stale
     // copy of the admin page (with stale slot statuses baked into the server-rendered skeleton and a
     // stale "Last updated" timestamp) on a later visit.
     res.setHeader("Cache-Control", "no-store");
     res.status(200).send(adminPageHtml({
-      updatedAt, source, storageWarning, provinces,
+      updatedAt, source, storageWarning, dataQualityIssues, provinces,
       categories: AWARD_CATEGORIES, slots: PROVINCE_SLOTS, referenceSlots: REFERENCE_SLOTS,
       signedInAs: getSessionIdentity(req),
     }));
