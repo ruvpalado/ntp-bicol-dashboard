@@ -1,0 +1,8 @@
+# Test suites and fixtures are development-only - never imported by api/ or lib/, so shipping them
+# just inflates every serverless function bundle. Excluded rather than deleted so they stay
+# available for local verification.
+test_*.js
+test_fixtures_*.xlsx
+
+# Local secrets belong in Vercel's environment variables, not in the deployment payload.
+.env*

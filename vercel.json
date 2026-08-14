@@ -1,0 +1,17 @@
+{
+  "outputDirectory": ".",
+  "rewrites": [
+    { "source": "/", "destination": "/api/index" },
+    { "source": "/login", "destination": "/api/login" },
+    { "source": "/admin", "destination": "/api/admin" },
+    { "source": "/logout", "destination": "/api/logout" },
+    { "source": "/signup", "destination": "/api/signup" },
+    { "source": "/forgot-password", "destination": "/api/forgot-password" },
+    { "source": "/reset-password", "destination": "/api/reset-password" }
+  ],
+  "functions": {
+    "api/province-upload.js": { "maxDuration": 800 },
+    "api/reference-upload.js": { "maxDuration": 800 },
+    "api/province-data.js": { "maxDuration": 800, "includeFiles": "assets/**" }
+  }
+}

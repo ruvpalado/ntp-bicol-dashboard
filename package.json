@@ -1,0 +1,14 @@
+{
+  "name": "ntp-live-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/generate-assets.js",
+    "start": "node server/index.js"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.5.0",
+    "express": "^4.22.2",
+    "xlsx": "^0.18.5"
+  }
+}
