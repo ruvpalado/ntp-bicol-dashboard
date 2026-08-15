@@ -188,6 +188,26 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     <h2>Awardee Recognition</h2>
     <div class="standings-hint">Gold/Silver/Bronze are identified automatically from current performance data on the public dashboard - no action is needed here for the normal case. Use this panel only to override a specific slot (e.g. a confirmed disqualification or data correction); pick "-- none --" to clear an override and return that slot to automatic identification.</div>
     <div id="awardsWarnBanner" class="banner warn"></div>
+
+    <div class="panel" style="border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+      <h3 style="margin:0 0 6px;font-size:13px;color:var(--navy);">Module Activation</h3>
+      <div class="standings-hint" style="margin:0 0 10px;">
+        Event-driven: the public dashboard shows a &ldquo;Coming Soon&rdquo; placeholder for Awardee Recognition
+        (every province and the region) until this date/time, e.g. your DQC (Data Quality Check) commencement -
+        then it switches to live standings automatically. Leave empty and Save to keep it always visible (the
+        default, and what stays in effect if you never set anything here).
+      </div>
+      <div class="field-row" style="align-items:flex-end;">
+        <div>
+          <label for="awActivation">Activation Date/Time</label>
+          <input type="datetime-local" id="awActivation" style="width:220px;">
+        </div>
+        <button id="awActivationSaveBtn" type="button" class="btn-sm">Save Activation</button>
+        <button id="awActivationClearBtn" type="button" class="btn-sm btn-ghost">Clear (always visible)</button>
+      </div>
+      <div id="awActivationStatus" class="standings-hint" style="margin:10px 0 0;"></div>
+    </div>
+
     <div class="field-row">
       <div>
         <label for="awPeriod">Recognition Period (Year)</label>
@@ -370,6 +390,59 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
   });
 
   loadAwardPanel();
+
+  // --- Module Activation (System Scheduling) ----------------------------------------------------
+  const awActivation = document.getElementById('awActivation');
+  const awActivationSaveBtn = document.getElementById('awActivationSaveBtn');
+  const awActivationClearBtn = document.getElementById('awActivationClearBtn');
+  const awActivationStatus = document.getElementById('awActivationStatus');
+
+  function fmtActivationStatus(iso) {
+    if (!iso) return 'Not set - Awardee Recognition is always visible on the public dashboard.';
+    const dt = new Date(/T\d/.test(iso) ? iso : (iso + 'T00:00:00'));
+    const when = isNaN(dt.getTime()) ? iso
+      : dt.toLocaleString(undefined, { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    const activationState = !isNaN(dt.getTime()) && Date.now() >= dt.getTime() ? 'already active' : 'scheduled, not yet active';
+    return 'Activates ' + when + ' (' + activationState + ').';
+  }
+
+  async function loadActivation() {
+    try {
+      const data = await fetch('/api/awards').then((r) => r.json());
+      const iso = data && data.activation;
+      awActivation.value = iso || '';
+      awActivationStatus.textContent = fmtActivationStatus(iso);
+    } catch (err) {
+      awActivationStatus.textContent = 'Could not load activation status: ' + err.message;
+    }
+  }
+
+  async function saveActivation(value) {
+    awActivationSaveBtn.disabled = true;
+    awActivationClearBtn.disabled = true;
+    awActivationStatus.textContent = 'Saving...';
+    try {
+      const res = await fetch('/api/awards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ setActivation: value || null }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+      awActivation.value = data.activation || '';
+      awActivationStatus.textContent = fmtActivationStatus(data.activation) + ' Saved.';
+    } catch (err) {
+      awActivationStatus.textContent = 'Save failed: ' + err.message;
+    } finally {
+      awActivationSaveBtn.disabled = false;
+      awActivationClearBtn.disabled = false;
+    }
+  }
+
+  awActivationSaveBtn.addEventListener('click', () => saveActivation(awActivation.value));
+  awActivationClearBtn.addEventListener('click', () => saveActivation(null));
+
+  loadActivation();
 
   // ---------------------------------------------------------------- Province upload slots
   // Per the Upload & Consolidation spec: one file per province/city slot, isolated datasets, a

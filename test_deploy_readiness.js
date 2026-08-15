@@ -133,8 +133,15 @@ for (const f of fs.readdirSync(path.join(ROOT, "lib")).filter((x) => x.endsWith(
         check("built page has no unreplaced data placeholder", !html.includes("__DATA_JSON__"));
         check("built page's sidebar module registry still lists the Awardee Recognition tab",
           html.includes('key:"awards"'));
-        check("built page has no activation-gating 'Coming Soon' path reachable from renderAwards",
-          !/isAwardsActiveForCurrentPage\(\)\)\{\s*el\.innerHTML\s*=\s*renderAwardsComingSoon/.test(html));
+        // Flipped per "System Scheduling" instruction: the module is event-driven again, gated on an
+        // admin-configured activation date/time (see lib/awardsStore.js's getActivationDate/
+        // setActivationDate and api/index.js's expandActivation()). Previously this asserted the
+        // OPPOSITE - that gating was NOT reachable - back when it had been deliberately removed in
+        // favor of always-live standings. isAwardsActiveForCurrentPage() itself still returns true
+        // (no gating in effect) whenever no activation date has ever been configured, so a deployment
+        // that never sets one behaves exactly as it did while gating was removed.
+        check("built page's renderAwards has the activation-gating 'Coming Soon' path reachable again",
+          /isAwardsActiveForCurrentPage\(\)\)\{\s*el\.innerHTML\s*=\s*renderAwardsComingSoon/.test(html));
         check("built page includes the intro splash image", html.includes('id="introImage"'));
         check("built page has no leftover <video> element", !html.includes("<video"));
         check("built page script tags balance",

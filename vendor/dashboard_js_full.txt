@@ -1797,13 +1797,21 @@ function renderKPIRow(node){
 // behavior above.
 function medalLabel(level){ return level.charAt(0).toUpperCase()+level.slice(1); }
 // --- Awardee Recognition activation gating -----------------------------------------------------
-// Per instruction: each province (and Naga City) has its own one-time activation date, set by the
-// Admin (see admin.js's Activation Dates panel, POST /api/award-activation). Before that date, this
-// module shows a "Coming Soon" panel instead of standings/certificates/export for that area. An area
-// with no date recorded at all is simply not active yet - there is no implicit default-active state.
-// Once an area's date has passed it stays active forever (no "deactivate"); Region-wide activates
-// automatically once every one of the 6 provinces + Naga City has individually passed its own date -
-// there is no separate Region date to configure.
+// System Scheduling: the admin sets ONE activation date/time for the whole module (server-side,
+// see api/index.js's expandActivation()), which is expanded before reaching here into the same
+// value repeated for every area - so mechanically this still checks "has every area's own date
+// passed", it just happens that every area always shares the same one. Once that moment has
+// passed the module stays active forever (no "deactivate"); Region-wide activates once every one
+// of the 6 provinces + Naga City has individually passed its date, which - since they're all the
+// same date - happens for all of them at once.
+//
+// NTP_AWARD_ACTIVATION being empty/missing entirely means the feature has never been configured on
+// this deployment - distinct from "configured but scheduled for the future". The former keeps the
+// module always-visible (its behavior before this feature existed, so a fresh deployment or one
+// where nobody has ever set a date isn't suddenly hidden); only the latter withholds standings.
+function hasAnyActivationConfigured(){
+  return !!(NTP_AWARD_ACTIVATION && Object.keys(NTP_AWARD_ACTIVATION).length);
+}
 function areaActivationDate(area){
   const raw = NTP_AWARD_ACTIVATION && NTP_AWARD_ACTIVATION[area];
   return (typeof raw === "string" && raw) ? raw : null;
@@ -1811,7 +1819,10 @@ function areaActivationDate(area){
 function isAreaActivated(area){
   const d = areaActivationDate(area);
   if(!d) return false;
-  const activatesAt = new Date(d + "T00:00:00");
+  // Accepts both a bare date ("2026-09-01") and a full datetime-local value ("2026-09-01T08:30") -
+  // the latter is what the admin's "Module Activation" date/time input actually sends, since DQC
+  // commencement is a date AND time, not just a day.
+  const activatesAt = new Date(/T\d/.test(d) ? d : (d + "T00:00:00"));
   return !isNaN(activatesAt.getTime()) && Date.now() >= activatesAt.getTime();
 }
 function allAwardAreas(){ return ALLP.concat(["NAGA CITY"]); }
@@ -1820,24 +1831,22 @@ function isRegionAwardsActivated(){
   return areas.length>0 && areas.every(isAreaActivated);
 }
 function isAwardsActiveForCurrentPage(){
+  if(!hasAnyActivationConfigured()) return true;
   return state.page==="REGION" ? isRegionAwardsActivated() : isAreaActivated(state.page);
+}
+function fmtActivationDateTime(d){
+  const dt = new Date(/T\d/.test(d) ? d : (d + "T00:00:00"));
+  if(isNaN(dt.getTime())) return d;
+  return dt.toLocaleString(undefined, {year:"numeric", month:"long", day:"numeric", hour:"numeric", minute:"2-digit"});
 }
 function renderAwardsComingSoon(scope, province){
   const label = scope==="region" ? "Bicol Region" : (LABEL[province]||province);
-  let detail;
-  if(scope==="region"){
-    const pending = allAwardAreas().filter(a=>!isAreaActivated(a));
-    detail = "Unlocks automatically once every province and Naga City has reached its own activation date."
-      + (pending.length ? " Still pending: " + pending.map(a=>LABEL[a]||a).join(", ") + "." : "");
-  } else {
-    const d = areaActivationDate(province);
-    if(d){
-      const dt = new Date(d + "T00:00:00");
-      detail = "Activates on " + (isNaN(dt.getTime()) ? d : dt.toLocaleDateString(undefined, {year:"numeric", month:"long", day:"numeric"})) + ".";
-    } else {
-      detail = "No activation date has been set yet for " + label + ".";
-    }
-  }
+  // One shared date/time activates every area at once (see hasAnyActivationConfigured()'s comment),
+  // so any area's own stored value already reflects the module-wide DQC commencement date/time.
+  const d = areaActivationDate(scope==="region" ? (allAwardAreas()[0]) : province);
+  const detail = d
+    ? "Activates on " + fmtActivationDateTime(d) + "."
+    : "No activation date/time has been set yet.";
   return `<div class="section-title"><h2>Awardee Recognition</h2></div>
     <div class="panel">
       <h3>Coming Soon</h3>
@@ -1901,8 +1910,11 @@ function exportAwardsExcel(){
 function renderAwards(el){
   const scope = state.page==="REGION" ? "region" : "province";
   const province = scope==="province" ? state.page : null;
-  // Activation-date gating has been removed - Awardee Recognition standings are always shown,
-  // computed live from current performance data (see AWARD_CATEGORIES/officialAward above).
+  // System Scheduling: before the admin-configured activation date/time, show a "Coming Soon"
+  // placeholder instead of live standings. If activation has never been configured on this
+  // deployment at all, isAwardsActiveForCurrentPage() returns true (see its own comment) so nothing
+  // changes for a site that hasn't set this up.
+  if(!isAwardsActiveForCurrentPage()){ el.innerHTML = renderAwardsComingSoon(scope, province); return; }
   const period = currentAwardPeriod();
   const scopeNote = scope==="region"
     ? "Regional board ranks the 6 provinces plus Naga City against each other."
