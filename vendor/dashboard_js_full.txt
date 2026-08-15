@@ -1931,10 +1931,6 @@ function renderModule(){
   const el = document.getElementById("moduleContent");
   if(state.module==="awards"){ renderAwards(el); return; }
   if(!d){ el.innerHTML = noData("No data for this selection."); return; }
-  const periodActive = state.periodValue && state.periodValue!=="ALL";
-  const noMonthlyDataNote = (periodActive && (state.module==="lab" || state.module==="screening"))
-    ? `<div class="period-note">Note: Screening &amp; Presumptive and Laboratory figures are not broken down by month/quarter in the source data (the sheets are pre-aggregated per facility with no date column) - the totals below reflect the full reporting period regardless of the Month/Quarter selection above.</div>`
-    : "";
   if(state.module==="cnr") renderCNR(d, el);
   else if(state.module==="tsr") renderTSR(d, el);
   else if(state.module==="mn") renderMN(d, el);
@@ -1943,7 +1939,6 @@ function renderModule(){
   else if(state.module==="lab") renderLab(d, el);
   else if(state.module==="target") renderTarget(d, el);
   else if(state.module==="pict") renderPict(d, el);
-  if(noMonthlyDataNote) el.insertAdjacentHTML("afterbegin", noMonthlyDataNote);
 }
 
 // "MN Facilities" is selected in the CNR module's Facility dropdown: `d` is still the resolved
