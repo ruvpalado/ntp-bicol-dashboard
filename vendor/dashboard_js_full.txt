@@ -2460,21 +2460,20 @@ function renderPict(d, el){
   // dedicated "PICT" sheet (never derived from CNR/MN data, per instruction). d.pict.has_data is
   // false only when this scope has no rows in that sheet.
   const p = d.pict;
-  const badge = p.has_data? '<span class="badge good">Live</span>' : '<span class="badge warn">Awaiting data</span>';
   const val = v => p.has_data? fmt(v) : "n/a";
   el.innerHTML = `<div class="section-title"><h2>PICT Examination &middot; TB-HIV Collaborative Activities</h2></div>
     <div class="desc">PICT = Provider-Initiated Counseling &amp; Testing, the TB-HIV collaborative activity that offers HIV testing to diagnosed TB patients. Sourced from the PICT sheet.</div>
     ${p.has_data? "" : `<div class="panel">${noData("Awaiting PICT data upload for this scope.")}</div>`}
     <div class="panel" style="margin-top:14px;">
-    <table><thead><tr><th>Indicator</th><th>Breakdown</th><th>Value</th><th>Status</th></tr></thead>
+    <table><thead><tr><th>Indicator</th><th>Breakdown</th><th>Value</th></tr></thead>
     <tbody>
-      <tr><td rowspan="2">(1) TB Cases Registered, Age 15+</td><td>DS</td><td>${val(p.reg_adult_dstb)}</td><td>${badge}</td></tr>
-      <tr><td>DR</td><td>${val(p.reg_adult_drtb)}</td><td>${badge}</td></tr>
-      <tr><td rowspan="2">(2) Tested / Known HIV Status</td><td>DS</td><td>${val(p.hiv_tested_ds)}</td><td>${badge}</td></tr>
-      <tr><td>DR</td><td>${val(p.hiv_tested_dr)}</td><td>${badge}</td></tr>
-      <tr><td>(3) TB Cases Confirmed HIV-Positive</td><td>DS + DR combined</td><td>${val(p.hiv_positive_total)}</td><td>${badge}</td></tr>
-      <tr><td rowspan="2">(4) Among HIV-Positive, Given</td><td>ART</td><td>${val(p.art_given)}</td><td>${badge}</td></tr>
-      <tr><td>CPT</td><td>${val(p.cpt_given)}</td><td>${badge}</td></tr>
+      <tr><td rowspan="2">(1) TB Cases Registered, Age 15+</td><td>DS</td><td>${val(p.reg_adult_dstb)}</td></tr>
+      <tr><td>DR</td><td>${val(p.reg_adult_drtb)}</td></tr>
+      <tr><td rowspan="2">(2) Tested / Known HIV Status</td><td>DS</td><td>${val(p.hiv_tested_ds)}</td></tr>
+      <tr><td>DR</td><td>${val(p.hiv_tested_dr)}</td></tr>
+      <tr><td>(3) TB Cases Confirmed HIV-Positive</td><td>DS + DR combined</td><td>${val(p.hiv_positive_total)}</td></tr>
+      <tr><td rowspan="2">(4) Among HIV-Positive, Given</td><td>ART</td><td>${val(p.art_given)}</td></tr>
+      <tr><td>CPT</td><td>${val(p.cpt_given)}</td></tr>
     </tbody></table></div>`;
 }
 
