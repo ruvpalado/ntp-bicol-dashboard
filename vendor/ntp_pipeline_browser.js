@@ -25,6 +25,9 @@ const QUARTERS_ALL = {
   Q1: ["January","February","March"], Q2: ["April","May","June"],
   Q3: ["July","August","September"], Q4: ["October","November","December"]
 };
+const MONTH_TO_QUARTER = {};
+for (const q in QUARTERS_ALL) for (const m of QUARTERS_ALL[q]) MONTH_TO_QUARTER[m] = q;
+function monthToQuarter(month) { return MONTH_TO_QUARTER[month] || null; }
 
 // ---- Target formula constants (per program specification) ----
 const C_CTBN = 0.00561;
@@ -2360,6 +2363,25 @@ function runPipeline(workbook, progressCb) {
   // for Parago specifically it's a real improvement: the old Parago sheet had no Province column at
   // all and depended entirely on facility-name lookup, which is exactly why "1125 of 1243 rows
   // unmatched to a province" was showing up as a data-quality issue).
+  // Returns { total, byPeriod } - or null if this sheet isn't in the long/tidy layout at all.
+  //
+  // `total` is the existing one-row-per-facility lifetime aggregate (unchanged from before period
+  // tracking existed) - every caller that only cares about the full/no-selection totals keeps using
+  // this exactly as it always has.
+  //
+  // `byPeriod` is new: one row per (facility, period) combination, tagged with .Month (exact month
+  // name, e.g. "March") when the row's own Month column (1-12) parses, and/or .Quarter ("Q1".."Q4")
+  // when the row's own Quarter column (1-4) parses or can be derived from a known Month. A row with
+  // NEITHER a usable Month nor Quarter value is not added to byPeriod at all - it still counts toward
+  // `total` (so the full/no-selection view is unaffected), but per the requested dropdown behavior
+  // ("With Selection -> show only data related to the selected month or quarter") a row whose period
+  // is unknown cannot correctly be attributed to any specific month or quarter, so it simply doesn't
+  // appear in a period-filtered view rather than being guessed into one.
+  //
+  // A row that has a Quarter but no Month is still meaningful for quarter-level filtering (it
+  // unambiguously belongs to that quarter) even though it can't be placed in a specific month within
+  // it - handled by nodeForPeriod's period filter treating Month-less/Quarter-only rows as visible
+  // only in their matching QUARTER view, never in any single-month view.
   function aggregateLongReport(sheetName, categorize) {
     const raw = rawRows(workbook, sheetName);
     const header = longFormatHeader(raw);
@@ -2368,6 +2390,7 @@ function runPipeline(workbook, progressCb) {
     header.forEach((h, i) => { if (h && idx[h] === undefined) idx[h] = i; });
     if (idx["Value"] === undefined) return null;
     const groups = new Map();
+    const periodGroups = new Map();
     for (let i = 1; i < raw.length; i++) {
       const row = raw[i];
       if (!row || row.every(c => c === null || c === undefined)) continue;
@@ -2377,16 +2400,33 @@ function runPipeline(workbook, progressCb) {
       let province = blank(provRaw) ? null : cp(provRaw);
       if (!province && facility) province = lookupProv(facility);
       const municipality = facility ? lookupMuni(facility) : null;
-      const key = (province || "") + "|" + (facility || "");
-      let obj = groups.get(key);
-      if (!obj) { obj = { Province: province, Facility: facility, Municipality: municipality }; groups.set(key, obj); }
       const field = categorize(row, idx);
       if (!field) continue;
       const rawVal = idx["Value"] !== undefined ? row[idx["Value"]] : null;
       const n = parseFloat(rawVal);
-      obj[field] = (obj[field] || 0) + (isNaN(n) ? 0 : n);
+      const val = isNaN(n) ? 0 : n;
+
+      const key = (province || "") + "|" + (facility || "");
+      let obj = groups.get(key);
+      if (!obj) { obj = { Province: province, Facility: facility, Municipality: municipality }; groups.set(key, obj); }
+      obj[field] = (obj[field] || 0) + val;
+
+      // Quarter Column: 1->Q1, 2->Q2, 3->Q3, 4->Q4. Month Column: 1->January, ..., 12->December.
+      const monthNum = parseInt(longCell(row, idx, "Month"), 10);
+      const quarterNum = parseInt(longCell(row, idx, "Quarter"), 10);
+      const month = (monthNum >= 1 && monthNum <= 12) ? ALL_MONTHS[monthNum - 1] : null;
+      const quarter = (quarterNum >= 1 && quarterNum <= 4) ? ("Q" + quarterNum) : (month ? monthToQuarter(month) : null);
+      if (month || quarter) {
+        const pKey = key + "|" + (month || "") + "|" + (quarter || "");
+        let pObj = periodGroups.get(pKey);
+        if (!pObj) {
+          pObj = { Province: province, Facility: facility, Municipality: municipality, Month: month, Quarter: quarter };
+          periodGroups.set(pKey, pObj);
+        }
+        pObj[field] = (pObj[field] || 0) + val;
+      }
     }
-    return Array.from(groups.values());
+    return { total: Array.from(groups.values()), byPeriod: Array.from(periodGroups.values()) };
   }
 
   function categorizeScreeningLong(row, idx) {
@@ -2530,7 +2570,12 @@ function runPipeline(workbook, progressCb) {
     "PresumptiveIdentified_DS","PresumptiveIdentified_DR","_b3","PresumptiveTested_DS","PresumptiveTested_DR","_b4",
     "Diagnosed_DS","Diagnosed_DR"];
   const scrLong = aggregateLongReport("SCREENING PRESUMPTIVE", categorizeScreeningLong);
-  const scr = scrLong || [];
+  const scr = scrLong ? scrLong.total : [];
+  // WIDE-format sheets carry no per-row period info at all, so there is nothing to put in
+  // scrByPeriod for them - those facilities correctly show only in the full/no-selection view and
+  // are absent from any specific month/quarter selection (see the "Dropdown Selection Logic" this
+  // implements: "With Selection -> show only data related to the selected month or quarter").
+  const scrByPeriod = scrLong ? scrLong.byPeriod : [];
   if (!scrLong) {
     const scrRaw = rawRows(workbook, "SCREENING PRESUMPTIVE").slice(2);
     let lastProv = null;
@@ -2549,9 +2594,11 @@ function runPipeline(workbook, progressCb) {
     "TT_New","TT_Retx","N_New","N_Retx","I_New","I_Retx","Init_New","Init_Retx",
     "Cartridge_Utilized","DSSM_Examined","DSSM_Positive","DSSM_Follow"];
   const spLong = aggregateLongReport("SPUTUM EXAMINATION", categorizeSputumLong);
-  const sp = spLong || [];
+  const sp = spLong ? spLong.total : [];
+  const spByPeriod = spLong ? spLong.byPeriod : [];
   if (spLong) {
     deriveXpertTotals(sp, "_Retx");
+    deriveXpertTotals(spByPeriod, "_Retx");
   } else {
     const spRaw = rawRows(workbook, "SPUTUM EXAMINATION").slice(3);
     let lastProv = null;
@@ -2835,9 +2882,11 @@ function runPipeline(workbook, progressCb) {
   const stCols = ["Province","Facility","Total_New","Total_Relapse","RR_New","RR_Relapse","T_New","T_Relapse",
     "TI_New","TI_Relapse","TT_New","TT_Relapse","N_New","N_Relapse","I_New","I_Relapse","Init_New","Init_Relapse"];
   const stLong = aggregateLongReport("STOOL BASE EXAMINATION", categorizeStoolLong);
-  const st = stLong || [];
+  const st = stLong ? stLong.total : [];
+  const stByPeriod = stLong ? stLong.byPeriod : [];
   if (stLong) {
     deriveXpertTotals(st, "_Relapse");
+    deriveXpertTotals(stByPeriod, "_Relapse");
   } else {
     const stRaw = rawRows(workbook, "STOOL BASE EXAMINATION").slice(3);
     let lastProv = null;
@@ -2853,17 +2902,21 @@ function runPipeline(workbook, progressCb) {
   }
 
   const gxLong = aggregateLongReport("GENXPERT RESULT RELEASED", categorizeGenxpertReleaseLong);
-  const gx = gxLong
-    ? gxLong.map(o => ({
-        PROVINCE: o.Province, FACILITY: o.Facility, Municipality: o.Municipality,
-        "TOTAL results released": o["TOTAL results released"] || 0,
-        "RELEASE WITHIN 3 WORK DAYS": o["RELEASE WITHIN 3 WORK DAYS"] || 0,
-        "No. of rejected specimens": o["No. of rejected specimens"] || 0,
-        "Total": o["Total"] || 0,
-      }))
-    : objRows(workbook, "GENXPERT RESULT RELEASED", 1);
-  { let lastProv = null;
-    for (const r of gx) {
+  function gxReshape(o) {
+    return {
+      PROVINCE: o.Province, FACILITY: o.Facility, Municipality: o.Municipality,
+      Month: o.Month, Quarter: o.Quarter,
+      "TOTAL results released": o["TOTAL results released"] || 0,
+      "RELEASE WITHIN 3 WORK DAYS": o["RELEASE WITHIN 3 WORK DAYS"] || 0,
+      "No. of rejected specimens": o["No. of rejected specimens"] || 0,
+      "Total": o["Total"] || 0,
+    };
+  }
+  const gx = gxLong ? gxLong.total.map(gxReshape) : objRows(workbook, "GENXPERT RESULT RELEASED", 1);
+  const gxByPeriod = gxLong ? gxLong.byPeriod.map(gxReshape) : [];
+  function finishGx(rows) {
+    let lastProv = null;
+    for (const r of rows) {
       if (!blank(r["PROVINCE"])) lastProv = cp(r["PROVINCE"]); r["PROVINCE"] = lastProv;
       r.Municipality = lookupMuni(r["FACILITY"]);
       for (const c of ["TOTAL results released","RELEASE WITHIN 3 WORK DAYS","No. of rejected specimens","Total"]) {
@@ -2871,15 +2924,24 @@ function runPipeline(workbook, progressCb) {
       }
     }
   }
+  finishGx(gx);
+  finishGx(gxByPeriod);
 
   const paLong = aggregateLongReport("PARAGO CASE EXAMINATION", categorizeParagoLong);
   const pa = [];
+  const paByPeriod = [];
   if (paLong) {
-    for (const o of paLong) {
+    for (const o of paLong.total) {
       for (const c of ["ZN_Examined","NaOH_Examined","ZN_Positive","NaOH_Positive","PARAGO","TB","CoI","Neg"]) {
         if (o[c] === undefined) o[c] = 0;
       }
       pa.push(o);
+    }
+    for (const o of paLong.byPeriod) {
+      for (const c of ["ZN_Examined","NaOH_Examined","ZN_Positive","NaOH_Positive","PARAGO","TB","CoI","Neg"]) {
+        if (o[c] === undefined) o[c] = 0;
+      }
+      paByPeriod.push(o);
     }
   } else {
     const paColsRaw = ["_a","Facility","ZN_Examined","NaOH_Examined","ZN_Positive","NaOH_Positive","PARAGO","TB","CoI","Neg"];
@@ -2905,8 +2967,12 @@ function runPipeline(workbook, progressCb) {
 
   // Table E - Treatment Follow-up and PICT: long/tidy format only, no old-layout fallback (both were
   // previously unwired placeholders - there is no legacy wide-format version to fall back to).
-  const tf = aggregateLongReport("Table E - Treatment Follow-up", categorizeTreatmentFollowupLong) || [];
-  const pictRows = aggregateLongReport("PICT", categorizePictLong) || [];
+  const tfLong = aggregateLongReport("Table E - Treatment Follow-up", categorizeTreatmentFollowupLong);
+  const tf = tfLong ? tfLong.total : [];
+  const tfByPeriod = tfLong ? tfLong.byPeriod : [];
+  const pictLong = aggregateLongReport("PICT", categorizePictLong);
+  const pictRows = pictLong ? pictLong.total : [];
+  const pictByPeriod = pictLong ? pictLong.byPeriod : [];
 
   notify("Computing KPIs across the full hierarchy...");
   function filterRows(rows, monthSet) { return monthSet ? rows.filter(r => monthSet.has(r.Month)) : rows; }
@@ -3751,7 +3817,7 @@ function runPipeline(workbook, progressCb) {
   log(`MN Facility dropdown: ${mnFacilitySet.size.toLocaleString()} private-sector facilities spun out into their own dropdown (geo_mn).`);
   log(`MN Module Facility dropdown: scoped to ${mnSheetFacilitySet.size.toLocaleString()} facilities that literally have a row in the MN 2026 sheet itself (geo_mn_sheet).`);
   log(`Hierarchy built: 1 region, ${ALL_PROVINCES.length} provinces, ${Object.values(geo).reduce((s, v) => s + Object.keys(v).length, 0)} municipalities and ${Object.values(geo).reduce((s, v) => s + Object.values(v).reduce((s2, fs) => s2 + fs.length, 0), 0)} facilities (within the 3 operational provinces).`);
-  log("Month/Quarter dropdown: CNR, MN, TPT, TSR and TPT Cohort re-filter by period; Screening & Presumptive and Laboratory sources are pre-aggregated with no date column and show full-period totals regardless of month/quarter selection.");
+  log("Month/Quarter dropdown: CNR, MN, TPT, TSR and TPT Cohort re-filter by period from their own Date columns. Screening & Presumptive and Laboratory sources (Sputum, Stool, GenXpert, Parago, Table E, PICT) re-filter by period too, but only for rows uploaded in the long/tidy layout with a usable Quarter/Month column - a row with neither is included in the full/no-selection view but excluded from any specific month/quarter selection (its period is unknown, not guessed); WIDE-format (older cross-tab layout) sheets carry no period information at all, so their facilities show only in the full/no-selection view.");
 
   notify("Computing monthly / quarterly slices...");
   function nodeForPeriod(province, municipality, facility, caseProvince) {
@@ -3784,43 +3850,70 @@ function runPipeline(workbook, progressCb) {
     const mnSubNr = filterByCols(mnIncluded, fCol);
     const cnrSubAll = filterByCols(cnr, fCol);
     const tsrSub = filterByCols(tsr, fColTsr), tptcSub = filterByCols(tptc, fColTsr);
+    // Full/no-selection totals - unchanged from before period tracking existed. These feed the main
+    // (non-period) node computation elsewhere and, below, every period slice too when nothing in the
+    // relevant sheet carries usable period info (see scrSubP etc.).
     const scrSub = filterLabByFacility(scr, "Facility", labF, facility), spSub = filterLabByFacility(sp, "Facility", labF, facility), stSub = filterLabByFacility(st, "Facility", labF, facility);
     const gxSub = filterLabByFacility(gx, "FACILITY", gxF, facility), paSub = filterLabByFacility(pa, "Facility", labF, facility);
     const tfSub = filterLabByFacility(tf, "Facility", labF, facility), pictSub = filterLabByFacility(pictRows, "Facility", labF, facility);
+    // Period-taggable subset (long/tidy-format rows only - see aggregateLongReport's byPeriod). Only
+    // these can be sliced by month/quarter; WIDE-format facilities have no rows here at all, so they
+    // correctly contribute nothing to a specific month/quarter selection while still appearing in the
+    // full/no-selection totals above.
+    const scrSubP = filterLabByFacility(scrByPeriod, "Facility", labF, facility), spSubP = filterLabByFacility(spByPeriod, "Facility", labF, facility), stSubP = filterLabByFacility(stByPeriod, "Facility", labF, facility);
+    const gxSubP = filterLabByFacility(gxByPeriod, "FACILITY", gxF, facility), paSubP = filterLabByFacility(paByPeriod, "Facility", labF, facility);
+    const tfSubP = filterLabByFacility(tfByPeriod, "Facility", labF, facility), pictSubP = filterLabByFacility(pictByPeriod, "Facility", labF, facility);
     const mnCatchmentSub = mnCatchmentFor(province, municipality, caseProvince);
     const byMonth = {}, byQuarter = {};
+    // Selects the rows in `rows` (period-tagged, from a *ByPeriod array) that belong to this period
+    // slice. A row with an exact .Month is included whenever monthArr contains it - identical test for
+    // both a single-month slice and a quarter slice (monthArr = that quarter's 3 months), so an exact
+    // month match works the same way in both views. A row that only carries a .Quarter (its source
+    // file gave a Quarter but no Month) is meaningful only for a quarter-level slice - it unambiguously
+    // belongs to quarterKey's quarter, but which of the 3 months within it is genuinely unknown, so it
+    // must not appear in any single-month view (isMonthSlice below) even though it's real data for that
+    // quarter. Rows with neither never reach byPeriod in the first place (see aggregateLongReport).
+    function filterLabByPeriod(rows, monthArr, quarterKey) {
+      if (!rows.length) return rows;
+      const ms = new Set(monthArr);
+      const isMonthSlice = monthArr.length === 1;
+      return rows.filter(r => {
+        if (r.Month) return ms.has(r.Month);
+        if (isMonthSlice) return false;
+        return !!quarterKey && r.Quarter === quarterKey;
+      });
+    }
     // Perf: the vast majority of period slices (month/quarter x every facility) turn out to carry
     // zero rows in every relevant sheet - a facility simply had no activity in a given month. Those
     // slices are byte-identical regardless of which month/quarter produced them, since computeNode()
     // is a pure function of population + these row arrays and nothing else (no facility/date lookups
-    // of its own). scrSub/spSub/stSub/gxSub/paSub/tfSub/pictSub in particular are never month-filtered
-    // to begin with (see computeNode()'s own monthFilter block below, which only touches cnr/mn/tpt/
-    // tsr/tptc/mnCatchment/mnSubNr/cnrSubAll) - they're the same object on every one of the 16 calls
-    // made here, so their emptiness only needs checking once per node, not once per period.
-    // Filtering here (once per period slice) with the pre-filtered results reused directly, plus
-    // caching the shared empty-result object, cuts the redundant work of rebuilding the same "nothing
-    // happened this period" breakdown tables 16 times per node - without changing a single output
-    // value (a cached slice is returned only when it is provably identical: same population, and
-    // every input row array empty after filtering, exactly as computeNode() would have computed it).
-    const constSubsAllEmpty = !scrSub.length && !spSub.length && !stSub.length && !gxSub.length &&
-      !paSub.length && !tfSub.length && !pictSub.length;
+    // of its own). Facilities whose lab data has no period info at all (scrSubP/spSubP/etc empty for
+    // them - i.e. every source row was WIDE-format) always filter to empty for every period slice, so
+    // their emptiness can still be checked once per node rather than once per period; facilities that
+    // DO have period-tagged rows are filtered fresh inside computeForPeriod below instead.
+    const labPeriodInvariantEmpty = !scrSubP.length && !spSubP.length && !stSubP.length && !gxSubP.length &&
+      !paSubP.length && !tfSubP.length && !pictSubP.length;
     let emptyCache = null;
-    function computeForPeriod(monthArr) {
+    function computeForPeriod(monthArr, quarterKey) {
       const ms = new Set(monthArr);
       const cnrF = filterRows(cnrSub, ms), mnF = filterRows(mnSub, ms), tptF = filterRows(tptSub, ms);
       const tsrF = filterRows(tsrSub, ms), tptcF = filterRows(tptcSub, ms);
       const mnCatchF = mnCatchmentSub ? filterRows(mnCatchmentSub, ms) : mnCatchmentSub;
       const mnSubNrF = mnSubNr ? filterRows(mnSubNr, ms) : mnSubNr;
       const cnrSubAllF = cnrSubAll ? filterRows(cnrSubAll, ms) : cnrSubAll;
-      const isEmpty = constSubsAllEmpty && !cnrF.length && !mnF.length && !tptF.length && !tsrF.length &&
+      const scrF = filterLabByPeriod(scrSubP, monthArr, quarterKey), spF = filterLabByPeriod(spSubP, monthArr, quarterKey);
+      const stF = filterLabByPeriod(stSubP, monthArr, quarterKey), gxF2 = filterLabByPeriod(gxSubP, monthArr, quarterKey);
+      const paF = filterLabByPeriod(paSubP, monthArr, quarterKey), tfF = filterLabByPeriod(tfSubP, monthArr, quarterKey);
+      const pictF = filterLabByPeriod(pictSubP, monthArr, quarterKey);
+      const isEmpty = labPeriodInvariantEmpty && !cnrF.length && !mnF.length && !tptF.length && !tsrF.length &&
         !tptcF.length && (!mnCatchF || !mnCatchF.length) && (!mnSubNrF || !mnSubNrF.length) && (!cnrSubAllF || !cnrSubAllF.length);
       if (isEmpty && emptyCache) return emptyCache;
-      const result = computeNode(pop, cnrF, mnF, tptF, tsrF, tptcF, scrSub, spSub, stSub, gxSub, paSub, null, mnCatchF, mnSubNrF, cnrSubAllF, tfSub, pictSub);
+      const result = computeNode(pop, cnrF, mnF, tptF, tsrF, tptcF, scrF, spF, stF, gxF2, paF, null, mnCatchF, mnSubNrF, cnrSubAllF, tfF, pictF);
       if (isEmpty) emptyCache = result;
       return result;
     }
-    for (const m of ALL_MONTHS) byMonth[m] = computeForPeriod([m]);
-    for (const q in QUARTERS_ALL) byQuarter[q] = computeForPeriod(QUARTERS_ALL[q]);
+    for (const m of ALL_MONTHS) byMonth[m] = computeForPeriod([m], null);
+    for (const q in QUARTERS_ALL) byQuarter[q] = computeForPeriod(QUARTERS_ALL[q], q);
     return { byMonth, byQuarter };
   }
 
