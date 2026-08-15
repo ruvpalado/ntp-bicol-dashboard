@@ -1797,31 +1797,28 @@ function renderKPIRow(node){
 // behavior above.
 function medalLabel(level){ return level.charAt(0).toUpperCase()+level.slice(1); }
 // --- Awardee Recognition activation gating -----------------------------------------------------
-// System Scheduling: the admin sets ONE activation date/time for the whole module (server-side,
-// see api/index.js's expandActivation()), which is expanded before reaching here into the same
-// value repeated for every area - so mechanically this still checks "has every area's own date
-// passed", it just happens that every area always shares the same one. Once that moment has
-// passed the module stays active forever (no "deactivate"); Region-wide activates once every one
-// of the 6 provinces + Naga City has individually passed its date, which - since they're all the
-// same date - happens for all of them at once.
-//
-// NTP_AWARD_ACTIVATION being empty/missing entirely means the feature has never been configured on
-// this deployment - distinct from "configured but scheduled for the future". The former keeps the
-// module always-visible (its behavior before this feature existed, so a fresh deployment or one
-// where nobody has ever set a date isn't suddenly hidden); only the latter withholds standings.
-function hasAnyActivationConfigured(){
-  return !!(NTP_AWARD_ACTIVATION && Object.keys(NTP_AWARD_ACTIVATION).length);
-}
+// System Scheduling: each area (6 provinces + Naga City) has its OWN independent activation
+// date/time, set by the admin per area - its own DQC (Data Quality Check) commencement, typically.
+// An area is visible (shows real standings) unless it has been GIVEN a date that hasn't arrived
+// yet. Concretely, per area:
+//   - no date configured for that area at all -> always visible (this is the default, and stays
+//     true forever unless/until an admin sets a date for that SPECIFIC area - other areas getting
+//     a date never affects this one).
+//   - date configured, in the future -> "Coming Soon" until that moment.
+//   - date configured, already passed -> visible (and stays visible forever - no "deactivate").
+// Region-wide is visible unless at least one area has a configured-but-not-yet-arrived date; areas
+// that were never given a date don't hold up the region view; each area's own page uses only its
+// own date, independent of every other area.
 function areaActivationDate(area){
   const raw = NTP_AWARD_ACTIVATION && NTP_AWARD_ACTIVATION[area];
   return (typeof raw === "string" && raw) ? raw : null;
 }
 function isAreaActivated(area){
   const d = areaActivationDate(area);
-  if(!d) return false;
+  if(!d) return true; // never configured for this area specifically -> always visible
   // Accepts both a bare date ("2026-09-01") and a full datetime-local value ("2026-09-01T08:30") -
-  // the latter is what the admin's "Module Activation" date/time input actually sends, since DQC
-  // commencement is a date AND time, not just a day.
+  // the latter is what the admin's per-area date/time input actually sends, since DQC commencement
+  // is a date AND time, not just a day.
   const activatesAt = new Date(/T\d/.test(d) ? d : (d + "T00:00:00"));
   return !isNaN(activatesAt.getTime()) && Date.now() >= activatesAt.getTime();
 }
@@ -1831,7 +1828,6 @@ function isRegionAwardsActivated(){
   return areas.length>0 && areas.every(isAreaActivated);
 }
 function isAwardsActiveForCurrentPage(){
-  if(!hasAnyActivationConfigured()) return true;
   return state.page==="REGION" ? isRegionAwardsActivated() : isAreaActivated(state.page);
 }
 function fmtActivationDateTime(d){
@@ -1840,10 +1836,26 @@ function fmtActivationDateTime(d){
   return dt.toLocaleString(undefined, {year:"numeric", month:"long", day:"numeric", hour:"numeric", minute:"2-digit"});
 }
 function renderAwardsComingSoon(scope, province){
-  const label = scope==="region" ? "Bicol Region" : (LABEL[province]||province);
-  // One shared date/time activates every area at once (see hasAnyActivationConfigured()'s comment),
-  // so any area's own stored value already reflects the module-wide DQC commencement date/time.
-  const d = areaActivationDate(scope==="region" ? (allAwardAreas()[0]) : province);
+  if(scope==="region"){
+    // List the specific area(s) still holding the region view back - i.e. areas that DO have a
+    // configured date and it hasn't arrived yet (areas with no date at all never appear here).
+    const pending = allAwardAreas().filter((a) => {
+      const d = areaActivationDate(a);
+      return d && !isAreaActivated(a);
+    });
+    const items = pending.map((a) => {
+      const d = areaActivationDate(a);
+      return `<li>${LABEL[a]||a} - activates on ${fmtActivationDateTime(d)}</li>`;
+    }).join("");
+    return `<div class="section-title"><h2>Awardee Recognition</h2></div>
+      <div class="panel">
+        <h3>Coming Soon</h3>
+        <div class="desc">The Bicol Region view waits for every area to activate. Still pending:</div>
+        <ul>${items}</ul>
+      </div>`;
+  }
+  const label = LABEL[province]||province;
+  const d = areaActivationDate(province);
   const detail = d
     ? "Activates on " + fmtActivationDateTime(d) + "."
     : "No activation date/time has been set yet.";

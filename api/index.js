@@ -7,26 +7,10 @@
 // report, so this serves a plain "awaiting uploads" page naming the outstanding areas rather than an
 // empty dashboard that looks broken - or, worse, stale numbers presented as if they were current.
 const { getCurrentKpi } = require("../lib/kpiStore");
-const { getCurrentAwards, getActivationDate } = require("../lib/awardsStore");
+const { getCurrentAwards, getActivationDates } = require("../lib/awardsStore");
 const { buildDashboardHtml } = require("../lib/buildDashboardHtml");
 const { PROVINCE_SLOTS } = require("../lib/provinceTemplate");
 const { getAllProvinceEntries, blobConfigured } = require("../lib/provinceStore");
-
-// System Scheduling: the admin configures ONE activation date/time for the whole Awardee &
-// Recognition module (see lib/awardsStore.js's getActivationDate/setActivationDate). The client
-// script (vendor/dashboard_js_full.txt) already gates activation per-area via a
-// { "<AREA>": "<date>" } object - a design built for a finer-grained scheme this project doesn't
-// use - so the single stored date is expanded here into that same date repeated for every area,
-// making the whole module activate together at once while reusing that existing, already-tested
-// gating logic unchanged. No date configured yet -> {} -> every area's isAreaActivated() returns
-// false... but renderAwards() treats "never configured" as "always show" (see that file), so a
-// fresh deployment with nothing set behaves exactly as it did before this feature existed.
-function expandActivation(iso) {
-  if (!iso) return {};
-  const areas = {};
-  for (const slot of PROVINCE_SLOTS) areas[slot.id] = iso;
-  return areas;
-}
 
 function awaitingUploadsHtml(outstanding, storageMissing) {
   const list = outstanding.length
@@ -139,8 +123,8 @@ module.exports = async (req, res) => {
       return;
     }
 
-    const [{ awards }, activation] = await Promise.all([getCurrentAwards(), getActivationDate()]);
-    const html = buildDashboardHtml(kpi, awards, expandActivation(activation));
+    const [{ awards }, activation] = await Promise.all([getCurrentAwards(), getActivationDates()]);
+    const html = buildDashboardHtml(kpi, awards, activation);
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "no-store");
     res.status(200).send(html);

@@ -190,22 +190,26 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     <div id="awardsWarnBanner" class="banner warn"></div>
 
     <div class="panel" style="border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:16px;">
-      <h3 style="margin:0 0 6px;font-size:13px;color:var(--navy);">Module Activation</h3>
+      <h3 style="margin:0 0 6px;font-size:13px;color:var(--navy);">Module Activation (Per Area)</h3>
       <div class="standings-hint" style="margin:0 0 10px;">
-        Event-driven: the public dashboard shows a &ldquo;Coming Soon&rdquo; placeholder for Awardee Recognition
-        (every province and the region) until this date/time, e.g. your DQC (Data Quality Check) commencement -
-        then it switches to live standings automatically. Leave empty and Save to keep it always visible (the
-        default, and what stays in effect if you never set anything here).
+        Event-driven, per province/city: the public dashboard shows a &ldquo;Coming Soon&rdquo; placeholder for
+        Awardee Recognition on an area's own page until that area's own date/time, e.g. its DQC (Data Quality
+        Check) commencement - then it switches to live standings automatically for that area only. Leave an
+        area empty and Save to keep it always visible (the default, and what stays in effect if you never set
+        anything for it - other areas' dates never affect it). The Bicol Region view activates once every area
+        below that HAS a date has passed it.
       </div>
-      <div class="field-row" style="align-items:flex-end;">
-        <div>
-          <label for="awActivation">Activation Date/Time</label>
-          <input type="datetime-local" id="awActivation" style="width:220px;">
-        </div>
-        <button id="awActivationSaveBtn" type="button" class="btn-sm">Save Activation</button>
-        <button id="awActivationClearBtn" type="button" class="btn-sm btn-ghost">Clear (always visible)</button>
+      <div id="awActivationRows">
+        ${slots.map((s) => `<div class="field-row" style="align-items:flex-end;margin-bottom:8px;" data-area="${s.id}">
+          <div style="min-width:130px;font-size:12.5px;color:var(--navy);font-weight:600;">${s.label}</div>
+          <div>
+            <input type="datetime-local" class="awActivationInput" data-area="${s.id}" style="width:220px;">
+          </div>
+          <button type="button" class="btn-sm awActivationSaveBtn" data-area="${s.id}">Save</button>
+          <button type="button" class="btn-sm btn-ghost awActivationClearBtn" data-area="${s.id}">Clear (always visible)</button>
+          <div class="awActivationStatus standings-hint" data-area="${s.id}" style="margin:0 0 0 8px;flex:1;"></div>
+        </div>`).join("")}
       </div>
-      <div id="awActivationStatus" class="standings-hint" style="margin:10px 0 0;"></div>
     </div>
 
     <div class="field-row">
@@ -391,14 +395,9 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
 
   loadAwardPanel();
 
-  // --- Module Activation (System Scheduling) ----------------------------------------------------
-  const awActivation = document.getElementById('awActivation');
-  const awActivationSaveBtn = document.getElementById('awActivationSaveBtn');
-  const awActivationClearBtn = document.getElementById('awActivationClearBtn');
-  const awActivationStatus = document.getElementById('awActivationStatus');
-
+  // --- Module Activation, per area (System Scheduling) -------------------------------------------
   function fmtActivationStatus(iso) {
-    if (!iso) return 'Not set - Awardee Recognition is always visible on the public dashboard.';
+    if (!iso) return 'Not set - always visible on the public dashboard.';
     const dt = new Date(/T\d/.test(iso) ? iso : (iso + 'T00:00:00'));
     const when = isNaN(dt.getTime()) ? iso
       : dt.toLocaleString(undefined, { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' });
@@ -406,41 +405,66 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     return 'Activates ' + when + ' (' + activationState + ').';
   }
 
+  function awRow(area) {
+    const row = document.querySelector('#awActivationRows [data-area="' + area + '"]');
+    return {
+      input: row.querySelector('.awActivationInput'),
+      saveBtn: row.querySelector('.awActivationSaveBtn'),
+      clearBtn: row.querySelector('.awActivationClearBtn'),
+      status: row.querySelector('.awActivationStatus'),
+    };
+  }
+
   async function loadActivation() {
     try {
       const data = await fetch('/api/awards').then((r) => r.json());
-      const iso = data && data.activation;
-      awActivation.value = iso || '';
-      awActivationStatus.textContent = fmtActivationStatus(iso);
+      const activation = (data && data.activation) || {};
+      document.querySelectorAll('#awActivationRows [data-area]').forEach((row) => {
+        const area = row.getAttribute('data-area');
+        const els = awRow(area);
+        const iso = activation[area] || '';
+        els.input.value = iso;
+        els.status.textContent = fmtActivationStatus(iso);
+      });
     } catch (err) {
-      awActivationStatus.textContent = 'Could not load activation status: ' + err.message;
+      document.querySelectorAll('.awActivationStatus').forEach((el) => {
+        el.textContent = 'Could not load activation status: ' + err.message;
+      });
     }
   }
 
-  async function saveActivation(value) {
-    awActivationSaveBtn.disabled = true;
-    awActivationClearBtn.disabled = true;
-    awActivationStatus.textContent = 'Saving...';
+  async function saveActivation(area, value) {
+    const els = awRow(area);
+    els.saveBtn.disabled = true;
+    els.clearBtn.disabled = true;
+    els.status.textContent = 'Saving...';
     try {
       const res = await fetch('/api/awards', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ setActivation: value || null }),
+        body: JSON.stringify({ setActivation: { area: area, value: value || null } }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
-      awActivation.value = data.activation || '';
-      awActivationStatus.textContent = fmtActivationStatus(data.activation) + ' Saved.';
+      const iso = (data.activation && data.activation[area]) || '';
+      els.input.value = iso;
+      els.status.textContent = fmtActivationStatus(iso) + ' Saved.';
     } catch (err) {
-      awActivationStatus.textContent = 'Save failed: ' + err.message;
+      els.status.textContent = 'Save failed: ' + err.message;
     } finally {
-      awActivationSaveBtn.disabled = false;
-      awActivationClearBtn.disabled = false;
+      els.saveBtn.disabled = false;
+      els.clearBtn.disabled = false;
     }
   }
 
-  awActivationSaveBtn.addEventListener('click', () => saveActivation(awActivation.value));
-  awActivationClearBtn.addEventListener('click', () => saveActivation(null));
+  document.querySelectorAll('.awActivationSaveBtn').forEach((btn) => {
+    const area = btn.getAttribute('data-area');
+    btn.addEventListener('click', () => saveActivation(area, awRow(area).input.value));
+  });
+  document.querySelectorAll('.awActivationClearBtn').forEach((btn) => {
+    const area = btn.getAttribute('data-area');
+    btn.addEventListener('click', () => saveActivation(area, null));
+  });
 
   loadActivation();
 
