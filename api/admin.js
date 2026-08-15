@@ -203,11 +203,11 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
         ${slots.map((s) => `<div class="field-row" style="align-items:flex-end;margin-bottom:8px;" data-area="${s.id}">
           <div style="min-width:130px;font-size:12.5px;color:var(--navy);font-weight:600;">${s.label}</div>
           <div>
-            <input type="datetime-local" class="awActivationInput" data-area="${s.id}" style="width:220px;">
+            <input type="datetime-local" class="awActivationInput" style="width:220px;">
           </div>
-          <button type="button" class="btn-sm awActivationSaveBtn" data-area="${s.id}">Save</button>
-          <button type="button" class="btn-sm btn-ghost awActivationClearBtn" data-area="${s.id}">Clear (always visible)</button>
-          <div class="awActivationStatus standings-hint" data-area="${s.id}" style="margin:0 0 0 8px;flex:1;"></div>
+          <button type="button" class="btn-sm awActivationSaveBtn">Save</button>
+          <button type="button" class="btn-sm btn-ghost awActivationClearBtn">Clear (always visible)</button>
+          <div class="awActivationStatus standings-hint" style="margin:0 0 0 8px;flex:1;"></div>
         </div>`).join("")}
       </div>
     </div>
@@ -408,6 +408,7 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
   function awRow(area) {
     const row = document.querySelector('#awActivationRows [data-area="' + area + '"]');
     return {
+      row,
       input: row.querySelector('.awActivationInput'),
       saveBtn: row.querySelector('.awActivationSaveBtn'),
       clearBtn: row.querySelector('.awActivationClearBtn'),
@@ -433,12 +434,16 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     }
   }
 
+  // Each area's own save is a single, independent request server-side (see lib/awardsStore.js -
+  // every area now lives at its own blob pathname, so two areas' saves can never race or clobber
+  // each other). This queue just protects against a double-click on the SAME row firing twice.
+  let awSaveQueue = Promise.resolve();
   async function saveActivation(area, value) {
     const els = awRow(area);
     els.saveBtn.disabled = true;
     els.clearBtn.disabled = true;
     els.status.textContent = 'Saving...';
-    try {
+    const run = async () => {
       const res = await fetch('/api/awards', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -449,21 +454,22 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
       const iso = (data.activation && data.activation[area]) || '';
       els.input.value = iso;
       els.status.textContent = fmtActivationStatus(iso) + ' Saved.';
-    } catch (err) {
-      els.status.textContent = 'Save failed: ' + err.message;
-    } finally {
-      els.saveBtn.disabled = false;
-      els.clearBtn.disabled = false;
-    }
+    };
+    awSaveQueue = awSaveQueue.then(run, run).then(
+      () => { els.saveBtn.disabled = false; els.clearBtn.disabled = false; },
+      (err) => {
+        els.status.textContent = 'Save failed: ' + err.message;
+        els.saveBtn.disabled = false;
+        els.clearBtn.disabled = false;
+      }
+    );
+    return awSaveQueue;
   }
 
-  document.querySelectorAll('.awActivationSaveBtn').forEach((btn) => {
-    const area = btn.getAttribute('data-area');
-    btn.addEventListener('click', () => saveActivation(area, awRow(area).input.value));
-  });
-  document.querySelectorAll('.awActivationClearBtn').forEach((btn) => {
-    const area = btn.getAttribute('data-area');
-    btn.addEventListener('click', () => saveActivation(area, null));
+  document.querySelectorAll('#awActivationRows [data-area]').forEach((row) => {
+    const area = row.getAttribute('data-area');
+    row.querySelector('.awActivationSaveBtn').addEventListener('click', () => saveActivation(area, awRow(area).input.value));
+    row.querySelector('.awActivationClearBtn').addEventListener('click', () => saveActivation(area, null));
   });
 
   loadActivation();

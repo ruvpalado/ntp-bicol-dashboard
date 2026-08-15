@@ -122,6 +122,30 @@ const kpi = runPipelineOnWorkbook({ SheetNames: ["POPULATION"], Sheets: { POPULA
     await awardsStore.setActivationDate("CATANDUANES", null);
   }
 
+  // Reproduces the reported production bug directly: an admin saving several rows on the admin
+  // page in quick succession fires several POST /api/awards {setActivation} requests that overlap
+  // in flight. With the old single-shared-document storage, each one's read-modify-write could
+  // interleave with another's, and only whichever write happened to land LAST would survive -
+  // every other area's just-saved date silently vanished (observed in production as "only Masbate
+  // and Catanduanes showing the activation date once saved"). Firing all 7 areas' saves
+  // concurrently here, exactly as rapid admin clicks would, must leave every one of them intact.
+  {
+    await Promise.all(PROVINCE_SLOTS.map((slot, i) => {
+      const req = mockReq("POST", { setActivation: { area: slot.id, value: "2026-11-0" + ((i % 9) + 1) + "T10:00" } });
+      const res = mockRes();
+      return awardsHandler(req, res);
+    }));
+    const stored = await awardsStore.getActivationDates();
+    check("all 7 areas saved CONCURRENTLY each persist independently (no lost-update race)",
+      PROVINCE_SLOTS.every((s) => !!stored[s.id]) && Object.keys(stored).length === PROVINCE_SLOTS.length,
+      JSON.stringify(stored));
+    // Clean up for Part B.
+    await Promise.all(PROVINCE_SLOTS.map((s) => awardsStore.setActivationDate(s.id, null)));
+    const cleared = await awardsStore.getActivationDates();
+    check("all 7 areas clear back to {} (concurrent clears also don't race)",
+      Object.keys(cleared).length === 0, JSON.stringify(cleared));
+  }
+
   // buildDashboardHtml embeds the per-area map as-is (no expansion) - verify only the configured
   // area(s) appear, not every area.
   {
