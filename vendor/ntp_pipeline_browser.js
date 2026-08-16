@@ -649,6 +649,36 @@ const FACILITY_PROVINCE_REFERENCE = {
   "PANTALEON G. GOTLADERA MEMORIAL HOSPITAL - TML": "SORSOGON"
 };
 
+// base_name(full canonical name) -> province, derived from FACILITY_PROVINCE_REFERENCE above so a
+// facility referenced WITHOUT its usual " - IDOTS"/" - MTBN"/etc suffix (a bare/alias spelling in an
+// uploaded sheet, or the roster's own baseName()-collapsed fallback entry - see facilityListProv/
+// facilityListMuni below) still gets the SAME verified province as its canonical, suffixed name,
+// instead of falling through to a roster- or TARGET-sheet-derived guess. This closes a real bug found
+// against the real "VIRAC RURAL HEALTH UNIT - IDOTS" facility: the Facility List roster's Province
+// column is filled once per block and carried down (ffill), and a heading typo/omission just above
+// Virac's block (e.g. a stray "Masbate" heading bleeding into the next block, confirmed in
+// test_fixtures_Format.xlsx row 362-364) makes facilityListProv[baseName("VIRAC RURAL HEALTH UNIT")]
+// resolve to the WRONG province. The exact suffixed name is protected because
+// FACILITY_PROVINCE_REFERENCE[fU] is checked first in resolveProv() and wins outright - but nothing
+// previously protected a BARE/alias spelling of that same facility, which only ever reaches the
+// base-name fallback further down the chain and inherited the roster's mistake, landing in a
+// nonexistent municipality (e.g. "MASBATE|VIRAC" - Masbate has no Virac) with no population and
+// therefore no CNR rate. Skips any base name that resolves to more than one DIFFERENT province across
+// the table (e.g. two distinct real facilities that happen to share a base name in different towns) -
+// an ambiguous base name has no single correct answer, so it is left out rather than guessed at, same
+// principle as AMBIGUOUS_FACILITY_PROVINCES/PROVINCE_AMBIGUOUS_FACILITIES below.
+const FACILITY_PROVINCE_REFERENCE_BASE = (function () {
+  const out = {}, conflict = new Set();
+  for (const fU in FACILITY_PROVINCE_REFERENCE) {
+    const b = baseName(fU);
+    const p = FACILITY_PROVINCE_REFERENCE[fU];
+    if (conflict.has(b)) continue;
+    if (out[b] === undefined) out[b] = p;
+    else if (out[b] !== p) { delete out[b]; conflict.add(b); }
+  }
+  return out;
+})();
+
 // Facility names reused, identically, by GENUINELY DIFFERENT physical facilities in different
 // provinces - see the matching Python comment (process_ntp_v4.py, alongside
 // FACILITY_PROVINCE_REFERENCE) for the full rationale. These two names are deliberately left OUT
@@ -1746,6 +1776,12 @@ function runPipeline(workbook, progressCb) {
     const fU = String(f).trim().toUpperCase();
     if (FACILITY_PROVINCE_REFERENCE[fU] !== undefined) return FACILITY_PROVINCE_REFERENCE[fU];
     if (fac2prov[fU] !== undefined) return fac2prov[fU];
+    // A bare/alias spelling (no exact FACILITY_PROVINCE_REFERENCE match) of a facility that IS in the
+    // reference table under its usual suffixed name still gets that verified province here, before
+    // falling through to fac2provBase/facilityListProv - both of which can carry a roster or
+    // TARGET-sheet ffill mistake for a block heading. See FACILITY_PROVINCE_REFERENCE_BASE's own
+    // comment for the real "VIRAC RURAL HEALTH UNIT" bug this fixes.
+    if (FACILITY_PROVINCE_REFERENCE_BASE[baseName(fU)] !== undefined) return FACILITY_PROVINCE_REFERENCE_BASE[baseName(fU)];
     if (fac2provBase[baseName(fU)] !== undefined) return fac2provBase[baseName(fU)];
     if (fac2provLinelist[fU] !== undefined) return fac2provLinelist[fU];
     // Facility List roster fallback (facilityListProv, populated further below in this function's
