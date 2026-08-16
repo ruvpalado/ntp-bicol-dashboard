@@ -3146,7 +3146,18 @@ function runPipeline(workbook, progressCb) {
       presumptive: popValid ? round0(population * C_PRESUMPTIVE) : null,
       screen_cxr: popValid ? round0(population * C_SCREEN_CXR) : null,
       mn: ctbn ? round0(ctbn * C_MN) : null,
-      rr_mdr: ctbn ? Math.round((ctbn * C_RR_A[0] * C_RR_A[1] + ctbn * C_RR_B[0] * C_RR_B[1]) * 10) / 10 : null,
+      // RR/MDR target: per the dashboard's own displayed formula ("(Case Notified x87%x1.96%) +
+      // (Case Notified x13%x13.53%)", see the Targets table row) and per instruction, this is driven
+      // by Case Notified - the actual notified total (New/Relapse CNR + New/Relapse MN, `notified`
+      // computed above) - split 87%/13% between the New and Other registration groups and applied
+      // each group's own RR/MDR prevalence rate, NOT by the population-derived CTBN estimate every
+      // other row in this object uses. Unlike ctbn/mn/tpt/etc, this does not depend on population at
+      // all, so it stays a real number (never null, 0 when notified is 0) even when population is
+      // missing - previously this used ctbn instead of notified, silently contradicting its own
+      // on-screen label and going null whenever population was unavailable even if cases had actually
+      // been notified. DSTB/DRTB targets (drtb_target = tgt.rr_mdr, dstb_target = tgt.ctbn -
+      // tgt.rr_mdr) intentionally inherit this fix automatically - see their own comments below.
+      rr_mdr: Math.round((notified * C_RR_A[0] * C_RR_A[1] + notified * C_RR_B[0] * C_RR_B[1]) * 10) / 10,
       tpt: ctbn ? round0(ctbn * C_TPT[0] * C_TPT[1] * C_TPT[2]) : null,
       bccd_ratio: C_BCCD, tsr_dstb_target: C_TSR_DSTB_TARGET * 100, tsr_drtb_target: C_TSR_DRTB_TARGET * 100,
     };
