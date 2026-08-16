@@ -11,16 +11,25 @@
 //     2. Multiply by 100,000 to obtain the CNR value.
 //
 // This is already how vendor/ntp_pipeline_browser.js's municipality nodes (nodeFor(province,
-// municipality, null) - no facility argument) are built: cnrSub/mnSub are filtered by Province +
-// City/Municipality ONLY (not by facility), so a municipality's totals already sum every facility
-// underneath it with no extra code needed for the multi-facility case; population comes from the
-// plain municipal figure (muniPopulation[province+"|"+municipality]) via computeNode's
-// notified/population*100000, never the per-facility catchment split (that split only ever touches
-// the *facility*-level nodes - see the "Facility-level CNR denominators" block right after nodeFor,
-// whose own comment says "municipality/province/region totals are untouched"). A single-facility
-// municipality runs through the exact same code path, so the "different" single-facility formula in
-// the spec above is mathematically identical to the multi-facility one - this test proves both
-// arithmetically, not just by code inspection.
+// municipality, null) - no facility argument) are built: population comes from the plain municipal
+// figure (muniPopulation[province+"|"+municipality]) via computeNode's notified/population*100000,
+// never the per-facility catchment split (that split only ever touches *facility*-level nodes - see
+// the "Facility-level CNR denominators" block right after nodeFor, whose own comment says
+// "municipality/province/region totals are untouched"). A single-facility municipality runs through
+// the exact same code path, so the "different" single-facility formula in the spec above is
+// mathematically identical to the multi-facility one - this test proves both arithmetically.
+//
+// CNR cases aggregate by the row's own City/Municipality column, summed across every public
+// facility that reported under this municipality (CNR sheet rows are never attributed any other
+// way). MN cases aggregate differently, per a later, more specific instruction confirmed against
+// real Daet, Camarines Norte data: a municipality's MN total counts every MN 2026 patient SEEN BY a
+// private facility physically LOCATED in that municipality (resolved the same way as the CNR
+// module's "MN Facilities" catchment view), not just patients whose own MN row happens to list that
+// municipality as home - a private clinic serving a wide catchment area (referrals from neighboring
+// towns) would otherwise be undercounted. This only applies to MUNICIPALITY nodes; an individual
+// facility's own page is unaffected (see test_racelis_tiongson_daet_exclusion.js for that
+// guarantee), and so is province/region - see vendor/ntp_pipeline_browser.js's nodeFor() comment
+// above its mnSub/mnSubNr assignment for the full rationale.
 const XLSX = require("xlsx");
 const fs = require("fs");
 
@@ -86,15 +95,19 @@ function buildWorkbook() {
     }
   }
 
-  // Bacacay: TWO facilities. CNR 5 + 3 = 8 rows, MN 2 + 1 = 3 rows -> 11 total.
+  // Bacacay: TWO public CNR facilities (5 + 3 = 8 rows) plus TWO private MN clinics physically
+  // located in Bacacay (2 + 1 = 3 rows) -> 11 total. MN facility names use the real "- MTBN" suffix
+  // convention (see FACILITY_MUNICIPALITY_REFERENCE/mnFacilitySet in the pipeline) so they resolve
+  // as private/MN facilities and get picked up by the municipality's catchment, exactly like real
+  // uploaded data.
   addCnr("Bacacay", "BACACAY RURAL HEALTH UNIT", 5, 0);
   addCnr("Bacacay", "BACACAY HEALTH CENTER", 3, 2);
-  addMn("Bacacay", "BACACAY RURAL HEALTH UNIT", 2, 1);
-  addMn("Bacacay", "BACACAY HEALTH CENTER", 1, 4);
+  addMn("Bacacay", "BACACAY MEDICAL CLINIC - MTBN", 2, 1);
+  addMn("Bacacay", "BACACAY DIAGNOSTIC CENTER - MTBN", 1, 4);
 
-  // Jovellar: ONE facility. CNR 4 rows, MN 1 row -> 5 total.
+  // Jovellar: ONE public CNR facility (4 rows) plus ONE private MN clinic (1 row) -> 5 total.
   addCnr("Jovellar", "JOVELLAR HEALTH CENTER", 4, 0);
-  addMn("Jovellar", "JOVELLAR HEALTH CENTER", 1, 3);
+  addMn("Jovellar", "JOVELLAR MEDICAL CLINIC - MTBN", 1, 3);
 
   out["CNR 2026 "] = cnrGrid;
   out["MN 2026"] = mnGrid;

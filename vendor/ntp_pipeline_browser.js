@@ -3658,14 +3658,26 @@ function runPipeline(workbook, progressCb) {
     } else {
       pop = regionPopulation; fCol = {}; fColTsr = {}; labF = {}; gxF = {};
     }
-    const cnrSub = filterByCols(cnrIncluded, fCol), mnSub = filterByCols(mn, fCol), tptSub = filterByCols(tpt, fCol);
-    const mnSubNr = filterByCols(mnIncluded, fCol);
+    const cnrSub = filterByCols(cnrIncluded, fCol), tptSub = filterByCols(tpt, fCol);
     const cnrSubAll = filterByCols(cnr, fCol);
     const tsrSub = filterByCols(tsr, fColTsr), tptcSub = filterByCols(tptc, fColTsr);
     const scrSub = filterLabByFacility(scr, "Facility", labF, facility), spSub = filterLabByFacility(sp, "Facility", labF, facility), stSub = filterLabByFacility(st, "Facility", labF, facility);
     const gxSub = filterLabByFacility(gx, "FACILITY", gxF, facility), paSub = filterLabByFacility(pa, "Facility", labF, facility);
     const tfSub = filterLabByFacility(tf, "Facility", labF, facility), pictSub = filterLabByFacility(pictRows, "Facility", labF, facility);
     const mnCatchmentSub = mnCatchmentFor(province, municipality, caseProvince);
+    // Municipality-level MN attribution: per instruction, a municipality's own MN figure (and
+    // therefore its Total Case Notified / CNR rate) counts every MN patient SEEN BY a facility
+    // physically located in that municipality (mnCatchmentSub, all registration groups) rather than
+    // only patients whose own MN 2026 row names that municipality as their residence - the sheet's
+    // own Municipality field records patient residence, which for private facilities serving a wide
+    // catchment area (referrals from neighboring towns) understates what those facilities actually
+    // accomplished. Confirmed against Daet, Camarines Norte: residence-based gave 59, catchment-based
+    // gives 189 - the correct figure per instruction. Scoped to municipality nodes ONLY - facility
+    // nodes (e.g. an individual Daet RHU) and province/region nodes keep their existing, unchanged
+    // residence-based/New-Relapse-restricted attribution (this branch only runs when facility is
+    // falsy, and province/region use their own fCol below, never this one).
+    const mnSub = (municipality && !facility) ? (mnCatchmentSub || []) : filterByCols(mn, fCol);
+    const mnSubNr = (municipality && !facility) ? (mnCatchmentSub || []) : filterByCols(mnIncluded, fCol);
     return computeNode(pop, cnrSub, mnSub, tptSub, tsrSub, tptcSub, scrSub, spSub, stSub, gxSub, paSub, null, mnCatchmentSub, mnSubNr, cnrSubAll, tfSub, pictSub);
   }
 
@@ -3846,10 +3858,17 @@ function runPipeline(workbook, progressCb) {
     } else {
       pop = regionPopulation; fCol = {}; fColTsr = {}; labF = {}; gxF = {};
     }
-    const cnrSub = filterByCols(cnrIncluded, fCol), mnSub = filterByCols(mn, fCol), tptSub = filterByCols(tpt, fCol);
-    const mnSubNr = filterByCols(mnIncluded, fCol);
+    const cnrSub = filterByCols(cnrIncluded, fCol), tptSub = filterByCols(tpt, fCol);
     const cnrSubAll = filterByCols(cnr, fCol);
     const tsrSub = filterByCols(tsr, fColTsr), tptcSub = filterByCols(tptc, fColTsr);
+    // Municipality-level MN attribution: same catchment-based rule as nodeFor() above (see its
+    // comment for the full rationale) - applied here too so a month/quarter selection stays
+    // consistent with the full/no-selection view instead of silently reverting to residence-based
+    // counting. mnCatchmentSub is computed a few lines below (unchanged position - still needed for
+    // the mn_facility_catchment field), but declared here isn't possible since it depends on
+    // mnCatchmentFor(), so this assignment is finalized right after that call instead.
+    let mnSub = filterByCols(mn, fCol);
+    let mnSubNr = filterByCols(mnIncluded, fCol);
     // Full/no-selection totals - unchanged from before period tracking existed. These feed the main
     // (non-period) node computation elsewhere and, below, every period slice too when nothing in the
     // relevant sheet carries usable period info (see scrSubP etc.).
@@ -3864,6 +3883,7 @@ function runPipeline(workbook, progressCb) {
     const gxSubP = filterLabByFacility(gxByPeriod, "FACILITY", gxF, facility), paSubP = filterLabByFacility(paByPeriod, "Facility", labF, facility);
     const tfSubP = filterLabByFacility(tfByPeriod, "Facility", labF, facility), pictSubP = filterLabByFacility(pictByPeriod, "Facility", labF, facility);
     const mnCatchmentSub = mnCatchmentFor(province, municipality, caseProvince);
+    if (municipality && !facility) { mnSub = mnCatchmentSub || []; mnSubNr = mnCatchmentSub || []; }
     const byMonth = {}, byQuarter = {};
     // Selects the rows in `rows` (period-tagged, from a *ByPeriod array) that belong to this period
     // slice. A row with an exact .Month is included whenever monthArr contains it - identical test for
