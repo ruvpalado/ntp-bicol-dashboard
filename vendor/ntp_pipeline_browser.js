@@ -3146,18 +3146,17 @@ function runPipeline(workbook, progressCb) {
       presumptive: popValid ? round0(population * C_PRESUMPTIVE) : null,
       screen_cxr: popValid ? round0(population * C_SCREEN_CXR) : null,
       mn: ctbn ? round0(ctbn * C_MN) : null,
-      // RR/MDR target: per the dashboard's own displayed formula ("(Case Notified x87%x1.96%) +
-      // (Case Notified x13%x13.53%)", see the Targets table row) and per instruction, this is driven
-      // by Case Notified - the actual notified total (New/Relapse CNR + New/Relapse MN, `notified`
-      // computed above) - split 87%/13% between the New and Other registration groups and applied
-      // each group's own RR/MDR prevalence rate, NOT by the population-derived CTBN estimate every
-      // other row in this object uses. Unlike ctbn/mn/tpt/etc, this does not depend on population at
-      // all, so it stays a real number (never null, 0 when notified is 0) even when population is
-      // missing - previously this used ctbn instead of notified, silently contradicting its own
-      // on-screen label and going null whenever population was unavailable even if cases had actually
-      // been notified. DSTB/DRTB targets (drtb_target = tgt.rr_mdr, dstb_target = tgt.ctbn -
-      // tgt.rr_mdr) intentionally inherit this fix automatically - see their own comments below.
-      rr_mdr: Math.round((notified * C_RR_A[0] * C_RR_A[1] + notified * C_RR_B[0] * C_RR_B[1]) * 10) / 10,
+      // RR/MDR target: "(Case Notified x87%x1.96%) + (Case Notified x13%x13.53%)" - CLARIFIED per
+      // instruction that "Case Notified" here means the CASE TO BE notified, i.e. the population-
+      // derived case-notification TARGET (ctbn, same figure as tgt.ctbn/notif_target above) split
+      // 87%/13% between the New and Other registration groups with each group's own RR/MDR prevalence
+      // rate applied - NOT the actual reported notified total. This matches every other row in this
+      // `tgt` object (mn/tpt/presumptive/etc are all likewise derived from ctbn, a target, not from
+      // what was actually notified) and keeps the DSTB/DRTB targets below internally consistent, since
+      // dstb_target is defined as the complementary remainder of the SAME ctbn minus this RR/MDR
+      // target - subtracting an actual-based figure from a target-based one would not compose
+      // correctly. Reverts an earlier attempt at this fix that used `notified` (actual) instead.
+      rr_mdr: ctbn ? Math.round((ctbn * C_RR_A[0] * C_RR_A[1] + ctbn * C_RR_B[0] * C_RR_B[1]) * 10) / 10 : null,
       tpt: ctbn ? round0(ctbn * C_TPT[0] * C_TPT[1] * C_TPT[2]) : null,
       bccd_ratio: C_BCCD, tsr_dstb_target: C_TSR_DSTB_TARGET * 100, tsr_drtb_target: C_TSR_DRTB_TARGET * 100,
     };
