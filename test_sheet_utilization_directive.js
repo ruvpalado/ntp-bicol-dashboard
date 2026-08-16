@@ -77,9 +77,12 @@ const check = (n, ok, d) => results.push([n, !!ok, ok ? "" : (d || "")]);
     kpi.meta.data_quality_notes.find((n) => /Facility List:/.test(n)));
 
   // ---- 6: Total Case formula, proven against two REAL municipalities ----------------------------
+  // Daet's own DOTS/iDOTS figure (311) is itself catchment-based (see
+  // test_municipality_mn_catchment_attribution.js), not just the MN component - both sides of the
+  // formula sum every case reported BY a facility physically located in Daet.
   const daet = kpi.nodes["M|CAMARINES NORTE|DAET"];
-  check("Daet (HAS MN facilities): Total Case = DOTS/iDOTS (282) + MN (189) = 471",
-    daet && daet.cnr.cnr_cases === 282 && daet.cnr.mn_cases_incl === 189 && daet.cnr.notified === 471,
+  check("Daet (HAS MN facilities): Total Case = DOTS/iDOTS (311) + MN (189) = 500",
+    daet && daet.cnr.cnr_cases === 311 && daet.cnr.mn_cases_incl === 189 && daet.cnr.notified === 500,
     daet && JSON.stringify(daet.cnr));
 
   const basud = kpi.nodes["M|CAMARINES NORTE|BASUD"];

@@ -3622,6 +3622,31 @@ function runPipeline(workbook, progressCb) {
     return mn.filter(r => set.has(r._facUpper));
   }
 
+  // Same catchment principle as mnCatchmentFor() above, applied to the CNR sheet's own public
+  // (DOTS/iDOTS, hospital, referring, etc.) facilities: a municipality's CNR total should be every
+  // case reported BY a facility physically located in that municipality (fac2muni-resolved), not
+  // just rows whose own City/Municipality cell happens to spell that municipality exactly right.
+  // Per instruction ("Total Case shall be defined as: the sum of all cases reported by DOTS/iDOTS
+  // facilities under the municipality") - confirmed against Daet, Camarines Norte: summing each of
+  // Daet's 4 public facilities' own pages (101+73+91+46=311) gave a higher, more correct total than
+  // the row's-own-column figure (282), because a facility like Camarines Norte Provincial Hospital
+  // (a referral hospital) sees patients whose own recorded municipality is their home town, not
+  // Daet - same underlying pattern already fixed for MN. `rows` lets this serve both cnrIncluded
+  // (New/Relapse only, for the primary notified/rate figures) and the unrestricted `cnr` array (for
+  // by_reg_group's ALL-categories tabulation) without duplicating the facility-set lookup.
+  function cnrCatchmentFor(province, municipality, caseProvince, rows) {
+    if (caseProvince === undefined) caseProvince = province;
+    let facsHere;
+    if (municipality) {
+      facsHere = Object.keys(fac2muni).filter(f => fac2muni[f] === municipality && resolveProv(f) === caseProvince);
+    } else {
+      facsHere = Object.keys(fac2muni).filter(f => resolveProv(f) === caseProvince);
+    }
+    if (!facsHere.length) return null;
+    const set = new Set(facsHere);
+    return rows.filter(r => set.has(String(r["Screening/Diagnosing Health Facility"]).trim().toUpperCase()));
+  }
+
   function nodeFor(province, municipality, facility, caseProvince) {
     // caseProvince: overrides `province` for the CNR/MN/TPT/TSR/TPT-Cohort/lab row-filter columns
     // only, while `province` still drives the population lookup. Needed for Naga City: the
@@ -3658,8 +3683,7 @@ function runPipeline(workbook, progressCb) {
     } else {
       pop = regionPopulation; fCol = {}; fColTsr = {}; labF = {}; gxF = {};
     }
-    const cnrSub = filterByCols(cnrIncluded, fCol), tptSub = filterByCols(tpt, fCol);
-    const cnrSubAll = filterByCols(cnr, fCol);
+    const tptSub = filterByCols(tpt, fCol);
     const tsrSub = filterByCols(tsr, fColTsr), tptcSub = filterByCols(tptc, fColTsr);
     const scrSub = filterLabByFacility(scr, "Facility", labF, facility), spSub = filterLabByFacility(sp, "Facility", labF, facility), stSub = filterLabByFacility(st, "Facility", labF, facility);
     const gxSub = filterLabByFacility(gx, "FACILITY", gxF, facility), paSub = filterLabByFacility(pa, "Facility", labF, facility);
@@ -3678,6 +3702,16 @@ function runPipeline(workbook, progressCb) {
     // falsy, and province/region use their own fCol below, never this one).
     const mnSub = (municipality && !facility) ? (mnCatchmentSub || []) : filterByCols(mn, fCol);
     const mnSubNr = (municipality && !facility) ? (mnCatchmentSub || []) : filterByCols(mnIncluded, fCol);
+    // Municipality-level CNR (DOTS/iDOTS) attribution: same catchment principle, same reason -
+    // confirmed against Daet, where summing each of its 4 public facilities' own pages (311) didn't
+    // match the row's-own-column municipality total (282), because Camarines Norte Provincial
+    // Hospital (based in Daet, but a province-wide referral site) sees patients whose own recorded
+    // municipality is their home town, not Daet. See cnrCatchmentFor()'s own comment for the full
+    // rationale. Scoped to municipality nodes only, same as mnSub/mnSubNr above.
+    const cnrCatchmentSub = (municipality && !facility) ? cnrCatchmentFor(province, municipality, caseProvince, cnrIncluded) : null;
+    const cnrCatchmentAllSub = (municipality && !facility) ? cnrCatchmentFor(province, municipality, caseProvince, cnr) : null;
+    const cnrSub = (municipality && !facility) ? (cnrCatchmentSub || []) : filterByCols(cnrIncluded, fCol);
+    const cnrSubAll = (municipality && !facility) ? (cnrCatchmentAllSub || []) : filterByCols(cnr, fCol);
     return computeNode(pop, cnrSub, mnSub, tptSub, tsrSub, tptcSub, scrSub, spSub, stSub, gxSub, paSub, null, mnCatchmentSub, mnSubNr, cnrSubAll, tfSub, pictSub);
   }
 
@@ -3858,17 +3892,19 @@ function runPipeline(workbook, progressCb) {
     } else {
       pop = regionPopulation; fCol = {}; fColTsr = {}; labF = {}; gxF = {};
     }
-    const cnrSub = filterByCols(cnrIncluded, fCol), tptSub = filterByCols(tpt, fCol);
-    const cnrSubAll = filterByCols(cnr, fCol);
+    const tptSub = filterByCols(tpt, fCol);
     const tsrSub = filterByCols(tsr, fColTsr), tptcSub = filterByCols(tptc, fColTsr);
-    // Municipality-level MN attribution: same catchment-based rule as nodeFor() above (see its
-    // comment for the full rationale) - applied here too so a month/quarter selection stays
-    // consistent with the full/no-selection view instead of silently reverting to residence-based
-    // counting. mnCatchmentSub is computed a few lines below (unchanged position - still needed for
-    // the mn_facility_catchment field), but declared here isn't possible since it depends on
-    // mnCatchmentFor(), so this assignment is finalized right after that call instead.
+    // Municipality-level MN and CNR attribution: same catchment-based rule as nodeFor() above (see
+    // its comments for the full rationale) - applied here too so a month/quarter selection stays
+    // consistent with the full/no-selection view instead of silently reverting to the older,
+    // row's-own-column attribution. mnCatchmentSub/cnrCatchmentSub are computed a few lines below
+    // (unchanged position - mnCatchmentSub is still needed for the mn_facility_catchment field), but
+    // declared here isn't possible since they depend on mnCatchmentFor()/cnrCatchmentFor(), so these
+    // assignments are finalized right after those calls instead.
     let mnSub = filterByCols(mn, fCol);
     let mnSubNr = filterByCols(mnIncluded, fCol);
+    let cnrSub = filterByCols(cnrIncluded, fCol);
+    let cnrSubAll = filterByCols(cnr, fCol);
     // Full/no-selection totals - unchanged from before period tracking existed. These feed the main
     // (non-period) node computation elsewhere and, below, every period slice too when nothing in the
     // relevant sheet carries usable period info (see scrSubP etc.).
@@ -3883,7 +3919,12 @@ function runPipeline(workbook, progressCb) {
     const gxSubP = filterLabByFacility(gxByPeriod, "FACILITY", gxF, facility), paSubP = filterLabByFacility(paByPeriod, "Facility", labF, facility);
     const tfSubP = filterLabByFacility(tfByPeriod, "Facility", labF, facility), pictSubP = filterLabByFacility(pictByPeriod, "Facility", labF, facility);
     const mnCatchmentSub = mnCatchmentFor(province, municipality, caseProvince);
-    if (municipality && !facility) { mnSub = mnCatchmentSub || []; mnSubNr = mnCatchmentSub || []; }
+    if (municipality && !facility) {
+      mnSub = mnCatchmentSub || [];
+      mnSubNr = mnCatchmentSub || [];
+      cnrSub = cnrCatchmentFor(province, municipality, caseProvince, cnrIncluded) || [];
+      cnrSubAll = cnrCatchmentFor(province, municipality, caseProvince, cnr) || [];
+    }
     const byMonth = {}, byQuarter = {};
     // Selects the rows in `rows` (period-tagged, from a *ByPeriod array) that belong to this period
     // slice. A row with an exact .Month is included whenever monthArr contains it - identical test for
