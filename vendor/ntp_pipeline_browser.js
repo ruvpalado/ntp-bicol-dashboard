@@ -36,8 +36,6 @@ const C_PRESUMPTIVE = 0.019326, C_SCREEN_CXR = 0.113;
 const C_MN = 0.30;
 const C_RR_A = [0.87, 0.0196], C_RR_B = [0.13, 0.1353];
 const C_TPT = [3, 0.70, 0.75];
-const C_BCCD = [0.60, 0.40];
-const C_TSR_DRTB_TARGET = 0.90, C_TSR_DSTB_TARGET = 0.92;
 
 // Authoritative Screening/Diagnosing Health Facility -> Province reference.
 const FACILITY_PROVINCE_REFERENCE = {
@@ -3158,7 +3156,6 @@ function runPipeline(workbook, progressCb) {
       // correctly. Reverts an earlier attempt at this fix that used `notified` (actual) instead.
       rr_mdr: ctbn ? Math.round((ctbn * C_RR_A[0] * C_RR_A[1] + ctbn * C_RR_B[0] * C_RR_B[1]) * 10) / 10 : null,
       tpt: ctbn ? round0(ctbn * C_TPT[0] * C_TPT[1] * C_TPT[2]) : null,
-      bccd_ratio: C_BCCD, tsr_dstb_target: C_TSR_DSTB_TARGET * 100, tsr_drtb_target: C_TSR_DRTB_TARGET * 100,
     };
 
     function ageBand(age) {
@@ -3201,9 +3198,9 @@ function runPipeline(workbook, progressCb) {
     // below) AND Target vs. Accomplishment's Total Adults/Total Children, per instruction: "in
     // Target VS Accomplishment module ... Count all entries where age is 0-14 -> Total Children
     // [and] 15+ -> Total Adults [for] CNR 2026 and MN 2026 ... Children = (Children from CNR 2026)
-    // + (Children from MN 2026), same for Adults." All OTHER CNR-module breakdowns (by_age_band,
-    // by_sex, age_gender, bacteriologic status, top facilities) remain CNR-sheet-only, since the
-    // instruction was scoped to "Adult and children" specifically.
+    // + (Children from MN 2026), same for Adults." All OTHER CNR-module breakdowns (bacteriologic
+    // status, top facilities) remain CNR-sheet-only, since the instruction was scoped to "Adult and
+    // children" specifically.
     let mnChildActual = 0;
     if (mnCt) for (const r of mnSub) if (ageBand(r.Age) === "0-14") mnChildActual++;
     const mnAdultActual = mnCt - mnChildActual;
@@ -3212,35 +3209,10 @@ function runPipeline(workbook, progressCb) {
     const targetChildActual = childActual;
     const targetAdultActual = adultActual;
 
-    // Per instruction ("include MN in the computation of Adult and children"), this table combines
-    // BOTH CNR 2026 and MN 2026 rows, matching adultActual/childActual above (both ultimately sum
-    // to notified), rather than a CNR-sheet-only total.
-    const ageGender = { Child: {}, Adult: {} };
-    if (cnrCt) {
-      for (const r of cnrSub) {
-        const grp = ageBand(r.Age) === "0-14" ? "Child" : "Adult";
-        const sex = String(r.Sex);
-        ageGender[grp][sex] = (ageGender[grp][sex] || 0) + 1;
-      }
-    }
-    if (mnCt) {
-      for (const r of mnSub) {
-        const grp = ageBand(r.Age) === "0-14" ? "Child" : "Adult";
-        const sex = String(r.Sex);
-        ageGender[grp][sex] = (ageGender[grp][sex] || 0) + 1;
-      }
-    }
-    const AGE_BAND_LABELS = ["0-14","15-24","25-44","45-64","65+"];
-    const byAgeBand = {};
-    if (cnrCt) {
-      for (const lab of AGE_BAND_LABELS) byAgeBand[lab] = 0;
-      for (const r of cnrSub) { const b = ageBand(r.Age); if (b) byAgeBand[b] = (byAgeBand[b] || 0) + 1; }
-    }
-
     // Detailed Age & Sex breakdown by Registration Group (New/Relapse), 8-band standard NTP report
     // format ("F. Diagnosed All New and Relapse TB Cases (All Forms) by Age and Sex") - CNR
     // (already New/Relapse-only via cnrSub) + MN (New/Relapse-only via mnSubNr) combined, per
-    // instruction. Independent of the Child/Adult ageGender cross-tab above.
+    // instruction.
     function detailAgeBand(age) {
       if (age === null || age === undefined || isNaN(age)) return null;
       if (age < 5) return "0-4"; if (age < 15) return "5-14"; if (age < 25) return "15-24";
@@ -3340,7 +3312,6 @@ function runPipeline(workbook, progressCb) {
     // The MN (private-sector) cohort rows stay excluded either way - see process_ntp_v4.py's
     // matching comment for that rationale. Raw monthly count arrays are stored (not a pre-divided
     // rate array) so the front-end can re-derive the rate after monthly->quarterly aggregation.
-    const dsDrSub = tsrSub.filter(r => r.Type === "DS" || r.Type === "DR");
     const isBactConfirmed = (r) => {
       const v = String(r["Bacteriologic Status"] === null || r["Bacteriologic Status"] === undefined
         ? "" : r["Bacteriologic Status"]).trim().toUpperCase();
@@ -3421,17 +3392,6 @@ function runPipeline(workbook, progressCb) {
     // added so the combined "Treatment Success Rate Trend" line chart (DSTB + DRTB + MN together,
     // per instruction) has a real per-month series for all three types rather than omitting MN.
     const tsrTrendMn = successTrend(tsrSub.filter(r => r.Type === "MN"));
-    // Combined DS+DR figures kept alongside the disaggregated ones for backward compatibility -
-    // nothing on the dashboard reads these directly any more, but the shape of the KPI JSON stays
-    // stable for anything else consuming it.
-    const bactSub = dsDrSub.filter(isBactConfirmed);
-    const cureBasisBact = bactSub.length > 0;
-    const cureDenomSub = cureBasisBact ? bactSub : dsDrSub;
-    const cureCt = cureDenomSub.filter(r => r["Outcome/Status"] === "CURED").length;
-    const dsDrCt = cureDenomSub.length;
-    const cureRate = safeDiv(cureCt, dsDrCt, 1);
-    const trendCureCount = MONTHS.map(m => cureDenomSub.filter(r => r.Month === m && r["Outcome/Status"] === "CURED").length);
-    const trendDsDrTotal = MONTHS.map(m => cureDenomSub.filter(r => r.Month === m).length);
 
     const mnReferred = mnSub.filter(r => r["Referred to DOTS"] === "Y").length;
     const mnFacilityCt = mnFacilityCount(mnSub);
@@ -3537,15 +3497,14 @@ function runPipeline(workbook, progressCb) {
       population: popOk ? Math.round(population) : null,
       cnr: {
         notified, cnr_cases: cnrCt, mn_cases_incl: mnCtNotif, rate_per_100k: cnrRate,
-        trend_total: trendTotal, trend_cnr: trendCnr, trend_mn: trendMn,
+        trend_total: trendTotal,
         dstb: dstbCt, drtb: drtbCt, trend_dstb: trendDstb, trend_drtb: trendDrtb,
         adult_actual: adultActual, child_actual: childActual,
-        by_sex: cnrCt ? valueCounts(cnrSub.map(r => r.Sex)) : {},
-        by_age_band: byAgeBand, by_bact_status: bact, bc, cdx, bccd_actual: bccdActual, by_patient_source: bySource, by_reg_group: byRegGroup,
-        age_gender: ageGender, age_sex_detail: ageSexDetail, top_facilities: topFacilities,
+        by_bact_status: bact, bc, cdx, bccd_actual: bccdActual, by_patient_source: bySource, by_reg_group: byRegGroup,
+        age_sex_detail: ageSexDetail, top_facilities: topFacilities,
       },
-      tsr: { dstb: tsrDs, drtb: tsrDr, mn: tsrMn, all: tsrAll, cure_rate: cureRate, cure_count: cureCt, ds_dr_total: dsDrCt, trend_cure_count: trendCureCount, trend_ds_dr_total: trendDsDrTotal, cure_basis: cureBasisBact ? "bacteriologically_confirmed" : "ds_dr_cohort_fallback", cure_dstb: cureDstb, cure_drtb: cureDrtb, tsr_trend_dstb: tsrTrendDstb, tsr_trend_drtb: tsrTrendDrtb, tsr_trend_mn: tsrTrendMn },
-      mn: { total: mnCt, referred: mnReferred, referred_pct: safeDiv(mnReferred, mnCt, 1),
+      tsr: { dstb: tsrDs, drtb: tsrDr, mn: tsrMn, all: tsrAll, cure_dstb: cureDstb, cure_drtb: cureDrtb, tsr_trend_dstb: tsrTrendDstb, tsr_trend_drtb: tsrTrendDrtb, tsr_trend_mn: tsrTrendMn },
+      mn: { total: mnCt, referred: mnReferred,
         trend: trendMn, target: tgt.mn, coverage_pct: tgt.mn ? safeDiv(mnCt, tgt.mn, 1) : null,
         outcome_dist: mnCt ? valueCounts(mnSub.map(r => r["Outcome/Status"])) : {},
         facility_count: mnFacilityCt, referral_status_dist: mnReferralStatusDistMain,
@@ -3553,17 +3512,13 @@ function runPipeline(workbook, progressCb) {
       mn_facility_catchment: mnCatchmentSub ? mnMetrics(mnCatchmentSub, tgt.mn) : null,
       tpt: { enrolled: tptCt, target: tgt.tpt, coverage_pct: tgt.tpt ? safeDiv(tptCt, tgt.tpt, 1) : null,
         monthly_avg: Math.round(tptCt / 6 * 10) / 10, trend: MONTHS.map(m => tptSub.filter(r => r.Month === m).length),
-        by_indication: tptCt ? valueCounts(tptSub.map(r => r["Indication for TPT"])) : {},
         by_regimen: tptCt ? valueCounts(tptSub.map(r => r["TPT Regimen"])) : {},
         by_patient_source: tptCt ? valueCounts(tptSub.map(r => r["Source of Patient"])) : {},
         cohort_total: tptcTot, cohort_completed: tptcComp, cohort_rate: safeDiv(tptcComp, tptcTot, 1),
         cohort_outcome_dist: tptcOutcomeDist, age_sex_dist: tptAgeSexDist },
       screening: { has_data: hasScr, screened_cxr: screened, presumptive: presumptiveId,
         presumptive_acf: presumptiveAcf, presumptive_icf: presumptiveIcf, presumptive_ecf: presumptiveEcf,
-        tested: presumptiveTested, diagnosed, yield_pct: safeDiv(diagnosed, presumptiveTested, 1),
-        target_screen: tgt.screen_cxr, target_presumptive: tgt.presumptive,
-        screen_pct_target: tgt.screen_cxr ? safeDiv(screened, tgt.screen_cxr, 1) : null,
-        presumptive_pct_target: tgt.presumptive ? safeDiv(presumptiveId, tgt.presumptive, 1) : null },
+        tested: presumptiveTested, diagnosed, yield_pct: safeDiv(diagnosed, presumptiveTested, 1) },
       lab: {
         genxpert_exam: { has_data: hasSp, presumptive_examined: gxPresumptiveExamined, rr_detected: gxRrDetected,
           mtb_detected: gxMtbDetected, mtb_not_detected: gxNNotdetected, cartridges_utilized: gxCartridge,
@@ -3607,9 +3562,12 @@ function runPipeline(workbook, progressCb) {
         mn_target: tgt.mn, mn_actual: mnCt, mn_pct: tgt.mn ? safeDiv(mnCt, tgt.mn, 1) : null,
         rr_mdr_target: tgt.rr_mdr, rr_mdr_actual: drtbCt, rr_mdr_pct: tgt.rr_mdr ? safeDiv(drtbCt, tgt.rr_mdr, 1) : null,
         tpt_target: tgt.tpt, tpt_actual: tptCt, tpt_pct: tgt.tpt ? safeDiv(tptCt, tgt.tpt, 1) : null,
-        bccd_target: tgt.bccd_ratio, bccd_actual: bccdActual,
-        tsr_dstb_target: tgt.tsr_dstb_target, tsr_dstb_actual: tsrDs.rate,
-        tsr_drtb_target: tgt.tsr_drtb_target, tsr_drtb_actual: tsrDr.rate,
+        // bccd_target/tsr_dstb_target/tsr_drtb_target were removed - the dashboard shows these three
+        // as fixed literal text ("60% : 40%", "92%", "90%") rather than reading a target value from
+        // the KPI JSON, so the *_actual figures below are the only ones ever displayed.
+        bccd_actual: bccdActual,
+        tsr_dstb_actual: tsrDs.rate,
+        tsr_drtb_actual: tsrDr.rate,
       },
     };
   }
@@ -4076,9 +4034,6 @@ function runPipeline(workbook, progressCb) {
       idots_dots_facilities: idotsDotsFacilities, idots_dots_facility_labels: idotsDotsFacilityLabels,
       cnr_referring_with_data: cnrReferringWithData,
       data_quality_notes: findings, data_quality_issues: issues,
-      formula_constants: { ctbn_rate: C_CTBN, adult_pct: C_ADULT, child_pct: C_CHILD, presumptive_rate: C_PRESUMPTIVE,
-        screen_cxr_rate: C_SCREEN_CXR, mn_pct: C_MN, tpt_formula: C_TPT, bccd_ratio: C_BCCD,
-        tsr_dstb_target: C_TSR_DSTB_TARGET, tsr_drtb_target: C_TSR_DRTB_TARGET },
     },
   };
   notify("Done.");
