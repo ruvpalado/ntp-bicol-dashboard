@@ -30,9 +30,11 @@ async function handleGet(req, res) {
     const category = query(req, "category");
     const scope = query(req, "scope") || "region";
     const province = query(req, "province") || "";
+    const period = query(req, "period") || null;
+    const periodValue = query(req, "periodValue") || null;
     try {
       const { kpi } = await getCurrentKpi();
-      const candidates = candidatesFor(kpi, category, scope, province).slice(0, 15);
+      const candidates = candidatesFor(kpi, category, scope, province, period, periodValue).slice(0, 15);
       res.status(200).json({ candidates });
     } catch (err) {
       res.status(500).json({ error: (err && err.message) || "Unknown error" });

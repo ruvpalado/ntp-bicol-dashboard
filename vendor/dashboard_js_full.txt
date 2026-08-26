@@ -122,7 +122,7 @@ const AWARD_CATEGORIES = [
 // matching how it already gets its own tab/page throughout this dashboard).
 function awardRegionCandidates(catDef){
   return OPS.map(p => {
-    const n = NODES["P|"+p];
+    const n = periodNode(NODES["P|"+p]);
     const v = catDef.metric(n);
     return v==null ? null : {key:p, name:LABEL[p]||titleCase(p), value:v};
   }).filter(Boolean).sort((a,b)=>b.value-a.value);
@@ -135,7 +135,7 @@ function awardProvinceCandidates(catDef, province){
   const out = [];
   for(const key in NODES){
     if(!key.startsWith(prefix)) continue;
-    const n = NODES[key];
+    const n = periodNode(NODES[key]);
     const v = catDef.metric(n);
     if(v==null) continue;
     const parts = key.split("|");
@@ -1888,9 +1888,10 @@ function renderAwardCard(cat, scope, province){
     return `<div class="${rowCls}">${badgeHtml}<span class="award-name muted">No qualifying data yet</span><span class="award-val"></span></div>`;
   }).join("");
   const unitNote = scope==="region" ? "ranked by province" : (cat.provinceUnit==="municipality" ? "ranked by municipality" : "ranked by facility");
+  const periodNote = (!state.periodValue || state.periodValue==="ALL") ? "" : " &middot; " + periodLabel();
   return `<div class="panel award-card">
     <h3>${cat.label}</h3>
-    <div class="desc">${cat.metricLabel} &middot; ${unitNote}</div>
+    <div class="desc">${cat.metricLabel} &middot; ${unitNote}${periodNote}</div>
     <div class="award-official">${officialRows}</div>
   </div>`;
 }
@@ -1928,12 +1929,13 @@ function renderAwards(el){
   // changes for a site that hasn't set this up.
   if(!isAwardsActiveForCurrentPage()){ el.innerHTML = renderAwardsComingSoon(scope, province); return; }
   const period = currentAwardPeriod();
+  const periodContext = (!state.periodValue || state.periodValue==="ALL") ? "" : " for " + periodLabel();
   const scopeNote = scope==="region"
     ? "Regional board ranks the 6 provinces plus Naga City against each other."
     : `Provincial board ranks ${LABEL[province]||province}&rsquo;s own municipalities (Case Notification) or facilities (DSTB/DRTB Treatment Success, TB Preventive Treatment) against each other.`;
   const cards = AWARD_CATEGORIES.map(cat => renderAwardCard(cat, scope, province)).join("");
   el.innerHTML = `<div class="section-title"><h2>Awardee Recognition${period? " &middot; "+period+" Awardees" : ""}</h2></div>
-    <div class="desc">${scopeNote} Gold/Silver/Bronze are automatically identified from current performance data each time this page loads &mdash; no manual assignment required. The Admin may still override a specific slot via the live dashboard&rsquo;s Awardee Recognition admin panel for confirmed exceptions (e.g. a disqualification or data correction).</div>
+    <div class="desc">${scopeNote}${periodContext} &mdash; Gold/Silver/Bronze are automatically identified from performance data each time this page loads &mdash; no manual assignment required. The Admin may still override a specific slot via the live dashboard&rsquo;s Awardee Recognition admin panel for confirmed exceptions (e.g. a disqualification or data correction).</div>
     <div class="award-grid">${cards}</div>
     <div style="margin-top:14px;"><button id="awardsExportBtn" class="upload-btn" type="button" style="background:var(--teal);color:#fff;">Export Awardee Recognition (Excel)</button></div>`;
   const exportBtn = document.getElementById("awardsExportBtn");
