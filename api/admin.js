@@ -233,7 +233,9 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
       <div>
         <label for="awCategory">Category</label>
         <select id="awCategory">
-          ${categories.map((c) => `<option value="${c.key}" data-unit="${c.provinceUnit}">${c.label}</option>`).join("")}
+          ${categories.map((c) =>
+            `<option value="${c.key}" data-unit="${c.provinceUnit}"${c.key === "dstb_tsr" ? " selected" : ""}>${c.label}</option>`
+          ).join("")}
         </select>
       </div>
     </div>
