@@ -5,8 +5,11 @@
 //           { "<AREA>": "<datetime-local value>" } for every area that has one configured - an area
 //           absent from it has never been configured (always visible, see isAreaActivated()).
 // GET  /api/awards?candidates=1&category=cnr&scope=region|province&province=ALBAY
-//        -> { candidates: [{key,name,value}, ...] } ranked highest-first, for the admin panel's
-//           override picklist. Also public, for the same reason as above.
+//        -> { candidates: [{key,name,value}, ...] } ranked highest-first. Every unit in the
+//           selection is returned (no top-N cap): municipalities for Case Notification, facilities
+//           for the DSTB/DRTB Treatment Success and TB Preventive Treatment categories; the admin
+//           panel's awardee standings table renders all of them. Also public, since these standings
+//           are the same performance data already visible on the live public dashboard.
 // POST /api/awards  { period, scope, province, category, level, awardee }
 //        -> { ok: true }. Sets (or, if awardee is null, clears) one Gold/Silver/Bronze slot.
 //           Requires an authenticated admin session - this is the only mutating action here.
@@ -34,7 +37,7 @@ async function handleGet(req, res) {
     const periodValue = query(req, "periodValue") || null;
     try {
       const { kpi } = await getCurrentKpi();
-      const candidates = candidatesFor(kpi, category, scope, province, period, periodValue).slice(0, 15);
+      const candidates = candidatesFor(kpi, category, scope, province, period, periodValue);
       res.status(200).json({ candidates });
     } catch (err) {
       res.status(500).json({ error: (err && err.message) || "Unknown error" });

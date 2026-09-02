@@ -55,6 +55,12 @@ function mockRes() {
       "F|MASBATE|MASBATE CITY|Fac C": { tsr: { dstb: { rate: 92, by_bact_status: { "BACTERIOLOGICALLY CONFIRMED": 3 } }, cure_dstb: { rate: 88 }, drtb: { rate: 60 }, mn: { rate: 70 } }, tpt: { coverage_pct: 40 } },
     },
   };
+  // Give ALBAY 16 more municipalities so the candidates API's "return ALL units for the selection"
+  // contract (no top-15 cap - the admin awardee standings table shows every municipality/facility)
+  // is actually exercised: ALBAY then has 18 municipalities total.
+  for (let i = 1; i <= 16; i++) {
+    fakeKpi.nodes["M|ALBAY|MUNICIPALITY " + i] = { cnr: { rate_per_100k: 10 + i } };
+  }
   const { saveKpi } = require(BASE + "lib/kpiStore");
   await saveKpi(fakeKpi);
   const roundTrip = await getCurrentKpi();
@@ -90,6 +96,8 @@ function mockRes() {
     const c = res._body && res._body.candidates;
     check("province CNR candidates rank municipalities (LEGAZPI 150 before TABACO 90)",
       c && c[0] && /LEGAZPI/i.test(c[0].name) && c[1] && /TABACO/i.test(c[1].name), JSON.stringify(c));
+    check("province CNR candidates return ALL 18 municipalities - no top-15 truncation",
+      c && c.length === 18, JSON.stringify(c && c.length));
   }
 
   // 4. DSTB Treatment Success ranks facilities at the PROVINCIAL level (provinceUnit facility), and
