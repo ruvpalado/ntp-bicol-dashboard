@@ -289,7 +289,7 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     <div class="standings-hint" style="margin-top:14px;">Standings by <span id="awTableUnit">—</span>, ranked highest-first.</div>
     <div style="max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:10px;">
       <table class="hist" style="margin:0;">
-        <thead>
+        <thead id="awCandidatesHead">
           <tr>
             <th>Rank</th>
             <th>Name</th>
@@ -445,28 +445,46 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     selectEl.innerHTML = html;
   }
 
-  // Renders the standings table with Success Rate, Cure Rate and Bacteriologically Confirmed count
-  // alongside the ranking. Cure Rate and Bacteriologically Confirmed only apply to the facility-level
-  // TSR categories (dstb_tsr/drtb_tsr); for other categories/scopes those columns show a dash.
+  // Renders the standings table. Columns vary by category:
+  // - TSR categories (dstb_tsr/drtb_tsr): Success Rate, Cure Rate, Bacteriologically Confirmed
+  // - TPT (tpt): Success Rate, TPT Accomplish, TPT Target
+  // - Other categories (cnr): just Success Rate
   function renderCandidatesTable(candidates) {
     const unit = currentUnitLabel();
+    const isTpt = awCategory.value === 'tpt';
+    const isTsr = awCategory.value === 'dstb_tsr' || awCategory.value === 'drtb_tsr';
+    const colCount = isTpt ? 5 : (isTsr ? 5 : 3);
     document.getElementById('awTableUnit').textContent = '(' + unit + ')';
+
+    // Build header
+    const thead = document.getElementById('awCandidatesHead');
+    if (isTpt) {
+      thead.innerHTML = '<tr><th>Rank</th><th>Name</th><th>Success Rate</th><th>TPT Accomplish</th><th>TPT Target</th></tr>';
+    } else if (isTsr) {
+      thead.innerHTML = '<tr><th>Rank</th><th>Name</th><th>Success Rate</th><th>Cure Rate</th><th>Bacteriologically Confirmed</th></tr>';
+    } else {
+      thead.innerHTML = '<tr><th>Rank</th><th>Name</th><th>Success Rate</th></tr>';
+    }
+
     const tbody = document.getElementById('awCandidatesBody');
     if (!candidates.length) {
-      tbody.innerHTML = '<tr><td colspan="5" class="slot-meta">No candidates to rank for this selection.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="' + colCount + '" class="slot-meta">No candidates to rank for this selection.</td></tr>';
       return;
     }
     tbody.innerHTML = candidates.map((c, i) => {
-      const hasTiebreak = c.cureValue != null || (c.bactCount != null && c.bactCount !== 0);
-      const cure = c.cureValue != null ? (c.cureValue.toFixed(1) + '%') : (hasTiebreak ? '—' : '—');
-      const bact = c.bactCount != null ? (c.bactCount + '') : (hasTiebreak ? '—' : '—');
-      return '<tr>'
-        + '<td>' + (i + 1) + '</td>'
+      let cells = '<td>' + (i + 1) + '</td>'
         + '<td>' + (c.name || c.key) + '</td>'
-        + '<td>' + (c.value != null ? (c.value.toFixed(1) + '%') : '—') + '</td>'
-        + '<td>' + cure + '</td>'
-        + '<td>' + bact + '</td>'
-        + '</tr>';
+        + '<td>' + (c.value != null ? (c.value.toFixed(1) + '%') : '—') + '</td>';
+      if (isTpt) {
+        cells += '<td>' + (c.tptAccomplish != null ? c.tptAccomplish.toLocaleString() : '—') + '</td>'
+          + '<td>' + (c.tptTarget != null ? c.tptTarget.toLocaleString() : '—') + '</td>';
+      } else if (isTsr) {
+        const cure = c.cureValue != null ? (c.cureValue.toFixed(1) + '%') : '—';
+        const bact = c.bactCount != null ? (c.bactCount + '') : '—';
+        cells += '<td>' + cure + '</td>'
+          + '<td>' + bact + '</td>';
+      }
+      return '<tr>' + cells + '</tr>';
     }).join('');
   }
 

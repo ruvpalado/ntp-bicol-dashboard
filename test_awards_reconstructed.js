@@ -121,6 +121,29 @@ function mockRes() {
       c && c.length === 2 && /Fac B/i.test(c[0].name) && /Fac A/i.test(c[1].name), JSON.stringify(c));
   }
 
+  // 4b. TB Preventive Treatment candidates carry TPT Accomplish and TPT Target alongside the rate.
+  //     The fake nodes above set coverage_pct but not enrolled/target, so the tiebreak should fall
+  //     through to null - which is what the admin table renders as a dash. Add real counts to one
+  //     node to prove they are surfaced.
+  {
+    const { saveKpi } = require(BASE + "lib/kpiStore");
+    const cur = await getCurrentKpi();
+    cur.kpi.nodes["F|ALBAY|LEGAZPI|Fac A"].tpt.enrolled = 60;
+    cur.kpi.nodes["F|ALBAY|LEGAZPI|Fac A"].tpt.target = 100;
+    cur.kpi.nodes["F|ALBAY|TABACO|Fac B"].tpt.enrolled = 30;
+    cur.kpi.nodes["F|ALBAY|TABACO|Fac B"].tpt.target = 100;
+    await saveKpi(cur.kpi);
+    const req = mockReq("GET", "/api/awards?candidates=1&category=tpt&scope=province&province=ALBAY");
+    const res = mockRes();
+    await awardsHandler(req, res);
+    const c = res._body && res._body.candidates;
+    check("province TPT candidates rank facilities by coverage and carry tptAccomplish/tptTarget",
+      c && c.length === 2
+        && /Fac A/i.test(c[0].name) && c[0].tptAccomplish === 60 && c[0].tptTarget === 100
+        && /Fac B/i.test(c[1].name) && c[1].tptAccomplish === 30 && c[1].tptTarget === 100,
+      JSON.stringify(c));
+  }
+
   // 5. POST without auth is rejected.
   {
     const req = mockReq("POST", "/api/awards", { period: "2026", scope: "region", category: "cnr", level: "gold", awardee: { key: "MASBATE", name: "Masbate", value: 200 } });
