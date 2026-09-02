@@ -86,6 +86,7 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
   .admin-sidebar .chev{cursor:pointer;margin-left:auto;font-size:10px;color:var(--muted);transition:transform .15s ease;}
   .admin-sidebar li.open>.chev,.admin-sidebar li.open>a>.chev{transform:rotate(90deg);}
   .admin-sidebar ul.sub.collapsed{display:none;}
+  .content-area .card.hidden{display:none;}
   .content-area{flex:1;min-width:0;}
   @media (max-width:860px){ .wrap{flex-direction:column;} .admin-sidebar{width:100%;position:static;} }
   .card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:18px;}
@@ -160,14 +161,14 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     <ul>
       <li data-target="sec-uploads"><a><span class="num">1</span> Province &amp; City Data Uploads</a></li>
       <li data-target="sec-reference"><a><span class="num">2</span> Regional Reference Data</a></li>
-      <li class="parent" data-target="sec-awardee"><a><span class="num">3</span> Awardee Recognition <span class="chev">&#9656;</span></a>
+      <li class="parent"><a><span class="num">3</span> Awardee Recognition <span class="chev">&#9656;</span></a>
         <ul class="sub">
           <li data-target="sec-module-activation"><a><span class="num">3.1</span> Module Activation (Per Area)</a></li>
           <li data-target="sec-awardee-panel"><a><span class="num">3.2</span> Awardee</a></li>
         </ul>
       </li>
       <li data-target="sec-history"><a><span class="num">4</span> Upload History</a></li>
-      <li class="parent" data-target="sec-team"><a><span class="num">5</span> Team Accounts <span class="chev">&#9656;</span></a>
+      <li class="parent"><a><span class="num">5</span> Team Accounts <span class="chev">&#9656;</span></a>
         <ul class="sub">
           <li data-target="sec-pending"><a><span class="num">5.1</span> Pending</a></li>
           <li data-target="sec-active"><a><span class="num">5.2</span> Active</a></li>
@@ -224,37 +225,34 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     <div class="ref-grid" id="referenceSlots">${referenceSlots.map(referenceSlotSkeleton).join("")}</div>
   </div>
 
-  <div class="card" id="sec-awardee">
-    <h2>Awardee Recognition</h2>
-    <div class="standings-hint">Gold/Silver/Bronze are identified automatically from current performance data on the public dashboard - no action is needed here for the normal case. Use this panel only to override a specific slot (e.g. a confirmed disqualification or data correction); pick "-- none --" to clear an override and return that slot to automatic identification.</div>
+  <div class="card" id="sec-module-activation">
+    <h2>Module Activation (Per Area)</h2>
     <div id="awardsWarnBanner" class="banner warn"></div>
-
-    <div class="panel" id="sec-module-activation" style="border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:16px;">
-      <h3 style="margin:0 0 6px;font-size:13px;color:var(--navy);">Module Activation (Per Area)</h3>
-      <div class="standings-hint" style="margin:0 0 10px;">
-        Event-driven, per province/city: the public dashboard shows a &ldquo;Coming Soon&rdquo; placeholder for
-        Awardee Recognition on an area's own page until that area's own date/time, e.g. its DQC (Data Quality
-        Check) commencement - then it switches to live standings automatically for that area only. Leave an
-        area empty and Save to keep it always visible (the default, and what stays in effect if you never set
-        anything for it - other areas' dates never affect it). The Bicol Region view activates once every area
-        below that HAS a date has passed it.
-      </div>
-      <div id="awActivationRows">
-        ${slots.map((s) => `<div class="field-row" style="align-items:flex-end;margin-bottom:8px;" data-area="${s.id}">
-          <div style="min-width:130px;font-size:12.5px;color:var(--navy);font-weight:600;">${s.label}</div>
-          <div>
-            <input type="datetime-local" class="awActivationInput" style="width:220px;">
-          </div>
-          <button type="button" class="btn-sm awActivationSaveBtn">Save</button>
-          <button type="button" class="btn-sm btn-ghost awActivationClearBtn">Clear (always visible)</button>
-          <div class="awActivationStatus standings-hint" style="margin:0 0 0 8px;flex:1;"></div>
-        </div>`).join("")}
-      </div>
+    <div class="standings-hint">
+      Event-driven, per province/city: the public dashboard shows a &ldquo;Coming Soon&rdquo; placeholder for
+      Awardee Recognition on an area&rsquo;s own page until that area&rsquo;s own date/time, e.g. its DQC (Data Quality
+      Check) commencement - then it switches to live standings automatically for that area only. Leave an
+      area empty and Save to keep it always visible (the default, and what stays in effect if you never set
+      anything for it - other areas&rsquo; dates never affect it). The Bicol Region view activates once every area
+      below that HAS a date has passed it.
     </div>
+    <div id="awActivationRows">
+      ${slots.map((s) => `<div class="field-row" style="align-items:flex-end;margin-bottom:8px;" data-area="${s.id}">
+        <div style="min-width:130px;font-size:12.5px;color:var(--navy);font-weight:600;">${s.label}</div>
+        <div>
+          <input type="datetime-local" class="awActivationInput" style="width:220px;">
+        </div>
+        <button type="button" class="btn-sm awActivationSaveBtn">Save</button>
+        <button type="button" class="btn-sm btn-ghost awActivationClearBtn">Clear (always visible)</button>
+        <div class="awActivationStatus standings-hint" style="margin:0 0 0 8px;flex:1;"></div>
+      </div>`).join("")}
+    </div>
+  </div>
 
-    <div id="sec-awardee-panel">
-    <h3 style="margin:0 0 4px;font-size:13px;color:var(--navy);">Awardee</h3>
-    <div class="standings-hint" style="margin-bottom:14px;">Assign Gold/Silver/Bronze overrides below; leave a slot as "-- none --" for automatic identification.</div>
+  <div class="card" id="sec-awardee-panel">
+    <h2>Awardee</h2>
+    <div class="standings-hint">Gold/Silver/Bronze are identified automatically from current performance data on the public dashboard - no action is needed here for the normal case. Use this panel only to override a specific slot (e.g. a confirmed disqualification or data correction); pick &ldquo;-- none --&rdquo; to clear an override and return that slot to automatic identification.</div>
+    <div class="standings-hint" style="margin-bottom:14px;">Assign Gold/Silver/Bronze overrides below; leave a slot as &ldquo;-- none --&rdquo; for automatic identification.</div>
     <div class="field-row">
       <div>
         <label for="awScope">Ranking Level</label>
@@ -310,7 +308,6 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     </div>
     <button id="awardsSaveBtn" type="button" style="margin-top:14px;">Save Awardees</button>
     <div id="awardsStatusBanner" class="banner" style="margin-top:14px;"></div>
-    </div>
   </div>
 
   <div class="card" id="sec-history">
@@ -322,18 +319,25 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     </div>` : ""}
   </div>
 
-  <div class="card" id="sec-team">
-    <h2>Team Accounts</h2>
+  <div class="card" id="sec-pending">
+    <h2>Pending</h2>
     <div class="standings-hint">
-      Accounts request access via the login page's "Create an account" link. New requests appear
-      below under Pending Approval once they've set a password - approve or reject them here. Active
-      accounts can be revoked at any time. The shared admin password (used to sign in right now if
-      you're not using an individual account) still works regardless of anything here.
+      Accounts request access via the login page&rsquo;s &ldquo;Create an account&rdquo; link. New requests appear
+      below once they&rsquo;ve set a password &mdash; approve or reject them here.
     </div>
     <div id="usersWarnBanner" class="banner warn"></div>
     <div id="usersStatusBanner" class="banner" style="margin-top:0;margin-bottom:14px;"></div>
-    <div id="sec-pending" class="sub-card"></div>
-    <div id="sec-active" class="sub-card" style="margin-top:14px;"></div>
+    <div id="pendingUsersBox"></div>
+  </div>
+
+  <div class="card" id="sec-active">
+    <h2>Active</h2>
+    <div class="standings-hint">
+      Approved accounts that can sign in. Active accounts can be revoked at any time. The shared admin
+      password (used to sign in right now if you&rsquo;re not using an individual account) still works
+      regardless of anything here.
+    </div>
+    <div id="activeUsersBox"></div>
   </div>
 </div>
 </div>
@@ -352,55 +356,56 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     var sidebar = document.querySelector('.admin-sidebar');
     if (!sidebar) return;
     var items = Array.prototype.slice.call(sidebar.querySelectorAll('li[data-target]'));
-    // Parent groups (Awardee Recognition, Team Accounts) toggle their sub-list on chevron / row click.
+    var contentCards = Array.prototype.slice.call(document.querySelectorAll('.content-area .card'));
+    // All cards start hidden except the first sidebar target (sec-uploads).
+    contentCards.forEach(function (card) { card.style.display = 'none'; });
+    var firstTarget = items[0] && items[0].getAttribute('data-target');
+    var firstCard = firstTarget && document.getElementById(firstTarget);
+    if (firstCard) firstCard.style.display = '';
+    // Parent groups (Awardee Recognition, Team Accounts) expand their sub-list on click and
+    // navigate to the first sub-item.
     sidebar.querySelectorAll('li.parent').forEach(function (li) {
       li.addEventListener('click', function (e) {
         if (e.target.closest('ul.sub a')) return;
         var open = li.classList.toggle('open');
         var sub = li.querySelector('ul.sub');
         if (sub) sub.classList.toggle('collapsed', !open);
+        // Navigate to the first sub-item if present.
+        var firstSub = li.querySelector('ul.sub li[data-target]');
+        if (firstSub) showPanel(firstSub.getAttribute('data-target'));
       });
     });
-    function scrollTo(el) {
-      if (!el) return;
-      var y = el.getBoundingClientRect().top + window.pageYOffset - 74;
-      window.scrollTo({ top: y, behavior: 'smooth' });
-    }
-    items.forEach(function (li) {
-      li.addEventListener('click', function (e) {
-        if (e.target.closest('ul.sub a')) {
-          var subLi = e.target.closest('li[data-target]');
-          scrollTo(document.getElementById(subLi.getAttribute('data-target')));
-          return;
-        }
-        scrollTo(document.getElementById(li.getAttribute('data-target')));
-      });
-      var a = li.querySelector('a');
-      if (a) a.style.cursor = 'pointer';
-    });
-    // Scrollspy: the active section is the last one whose top has scrolled past the header.
-    var targets = items.map(function (li) { return li.getAttribute('data-target'); })
-      .filter(function (id) { return !!document.getElementById(id); });
-    function setActive(id) {
+    function showPanel(id) {
+      // Hide all cards, show the target.
+      contentCards.forEach(function (card) { card.style.display = 'none'; });
+      var target = document.getElementById(id);
+      if (target) target.style.display = '';
+      // Highlight the active sidebar item and auto-expand its parent.
       items.forEach(function (li) {
         var isThis = li.getAttribute('data-target') === id;
         li.classList.toggle('active', isThis);
         if (isThis) {
           var parent = li.closest('li.parent');
-          if (parent) parent.classList.add('open');
+          if (parent) {
+            parent.classList.add('open');
+            var sub = parent.querySelector('ul.sub');
+            if (sub) sub.classList.remove('collapsed');
+          }
         }
       });
     }
-    function onScroll() {
-      var active = targets[0];
-      targets.forEach(function (id) {
-        var el = document.getElementById(id);
-        if (el && el.getBoundingClientRect().top <= 90) active = id;
+    // Wire up leaf item clicks.
+    items.forEach(function (li) {
+      li.addEventListener('click', function (e) {
+        e.preventDefault();
+        var targetId = li.getAttribute('data-target');
+        if (targetId) showPanel(targetId);
       });
-      setActive(active);
-    }
-    window.addEventListener('scroll', onScroll, { passive: true });
-    onScroll();
+      var a = li.querySelector('a');
+      if (a) a.style.cursor = 'pointer';
+    });
+    // Show the first panel by default.
+    if (firstTarget) showPanel(firstTarget);
   })();
 
   // --- Awardee Recognition panel ---------------------------------------------------------------
