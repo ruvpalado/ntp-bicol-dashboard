@@ -69,20 +69,17 @@ function mockRes() {
     check("empty awards state is {} before anything is assigned", res._body && JSON.stringify(res._body.awards) === "{}", JSON.stringify(res._body));
   }
 
-  // 2. Region-scope candidates rank the category's own unit across all provinces: for CNR that is
-  //    municipalities region-wide, highest first - MASBATE City (300) before LEGAZPI (150) before
-  //    TABACO (90) - with the province name appended to disambiguate across the region.
+  // 2. Region-scope candidates rank PROVINCES against each other by their own aggregated
+  //    accomplishments - highest metric first - MASBATE (CNR 200) before ALBAY (CNR 120).
   {
     const req = mockReq("GET", "/api/awards?candidates=1&category=cnr&scope=region");
     const res = mockRes();
     await awardsHandler(req, res);
     const c = res._body && res._body.candidates;
-    check("region CNR candidates rank every municipality across the region (MASBATE CITY then LEGAZPI then TABACO)",
-      c && c[0] && c[0].key === "M|MASBATE|MASBATE CITY"
-        && c[1] && c[1].key === "M|ALBAY|LEGAZPI"
-        && c[2] && c[2].key === "M|ALBAY|TABACO", JSON.stringify(c));
-    check("candidate names are human-readable labels with province disambiguation",
-      c && c[0].name === "Masbate City (Masbate)" && c[1].name === "Legazpi (Albay)", JSON.stringify(c));
+    check("region CNR candidates rank provinces (MASBATE then ALBAY)",
+      c && c[0] && c[0].key === "P|MASBATE"
+        && c[0].name === "Masbate"
+        && c[1] && c[1].key === "P|ALBAY" && c[1].name === "Albay", JSON.stringify(c));
   }
 
   // 3. Province-scope CNR candidates rank municipalities within ALBAY (municipality is CNR's provinceUnit).
@@ -95,19 +92,17 @@ function mockRes() {
       c && c[0] && /LEGAZPI/i.test(c[0].name) && c[1] && /TABACO/i.test(c[1].name), JSON.stringify(c));
   }
 
-  // 4. DSTB Treatment Success ranks facilities at BOTH ranking levels. Region ranks all facilities
-  //    across the region, highest rate first (Fac C 92); ties on rate break by Cure Rate, then by
-  //    Bacteriologically Confirmed count (Fac B over Fac A: equal 90% and 80% cure, B has 9 vs 5).
+  // 4. DSTB Treatment Success ranks facilities at the PROVINCIAL level (provinceUnit facility), and
+  //    PROVINCES at the REGIONAL level. Region ranks provinces by their own aggregated TSR (MASBATE
+  //    dstb.rate 91 before ALBAY 88).
   {
     const req = mockReq("GET", "/api/awards?candidates=1&category=dstb_tsr&scope=region");
     const res = mockRes();
     await awardsHandler(req, res);
     const c = res._body && res._body.candidates;
-    check("region DSTB candidates rank every facility across the region with tiebreakers",
-      c && c[0] && /Fac C/i.test(c[0].name)
-        && c[1] && /Fac B/i.test(c[1].name)
-        && c[2] && /Fac A/i.test(c[2].name)
-        && c[1].cureValue === 80 && c[1].bactCount === 9 && c[2].bactCount === 5, JSON.stringify(c));
+    check("region DSTB candidates rank provinces by their aggregated treatment success (MASBATE then ALBAY)",
+      c && c[0] && c[0].key === "P|MASBATE" && c[1] && c[1].key === "P|ALBAY"
+        && c[0].value === 91 && c[1].value === 88, JSON.stringify(c));
   }
   {
     const req = mockReq("GET", "/api/awards?candidates=1&category=dstb_tsr&scope=province&province=ALBAY");

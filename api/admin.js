@@ -214,10 +214,6 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
 
     <div class="field-row">
       <div>
-        <label for="awPeriod">Recognition Period (Year)</label>
-        <input type="text" id="awPeriod" value="${new Date().getFullYear()}" style="width:100px;">
-      </div>
-      <div>
         <label for="awScope">Ranking Level</label>
         <select id="awScope">
           <option value="region">Regional</option>
@@ -239,7 +235,6 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
         </select>
       </div>
     </div>
-    <div id="awardsUnitHint" class="standings-hint"></div>
     <div id="awardLevels">
       <div class="award-level-row"><span class="medal gold">Gold</span><select id="awGold"></select></div>
       <div class="award-level-row"><span class="medal silver">Silver</span><select id="awSilver"></select></div>
@@ -298,12 +293,10 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
   }
 
   // --- Awardee Recognition panel ---------------------------------------------------------------
-  const awPeriod = document.getElementById('awPeriod');
   const awScope = document.getElementById('awScope');
   const awProvinceWrap = document.getElementById('awProvinceWrap');
   const awProvince = document.getElementById('awProvince');
   const awCategory = document.getElementById('awCategory');
-  const awardsUnitHint = document.getElementById('awardsUnitHint');
   const awGold = document.getElementById('awGold');
   const awSilver = document.getElementById('awSilver');
   const awBronze = document.getElementById('awBronze');
@@ -317,6 +310,7 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
   }
 
   function currentUnitLabel() {
+    if (awScope.value === 'region') return 'province';
     const opt = awCategory.options[awCategory.selectedIndex];
     return (opt && opt.getAttribute('data-unit')) || 'facility';
   }
@@ -327,7 +321,6 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
   });
   awProvince.addEventListener('change', loadAwardPanel);
   awCategory.addEventListener('change', loadAwardPanel);
-  awPeriod.addEventListener('change', loadAwardPanel);
 
   function fillLevelSelect(selectEl, candidates, current) {
     let html = '<option value="">-- none --</option>';
@@ -377,9 +370,6 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     const scope = awScope.value;
     const province = scope === 'province' ? awProvince.value : '';
     const category = awCategory.value;
-    awardsUnitHint.textContent = scope === 'region'
-      ? 'Ranks every ' + currentUnitLabel() + ' across the whole region against each other.'
-      : 'Ranks the ' + currentUnitLabel() + 's within the selected province.';
     try {
       const candQuery = '/api/awards?candidates=1&category=' + encodeURIComponent(category)
         + '&scope=' + encodeURIComponent(scope) + (province ? '&province=' + encodeURIComponent(province) : '');
@@ -388,7 +378,7 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
         fetch('/api/awards').then((r) => r.json()),
       ]);
       const candidates = (candRes && candRes.candidates) || [];
-      const period = awPeriod.value;
+      const period = String(new Date().getFullYear());
       const periodData = (currentRes.awards && currentRes.awards[period]) || {};
       const board = scope === 'region' ? (periodData.region || {}) : ((periodData.provinces || {})[province] || {});
       const catBoard = board[category] || {};
@@ -410,8 +400,7 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     const scope = awScope.value;
     const province = scope === 'province' ? awProvince.value : undefined;
     const category = awCategory.value;
-    const period = awPeriod.value;
-    if (!period) { awShowStatus('err', 'Enter a recognition period (year) first.'); return; }
+    const period = String(new Date().getFullYear());
     awardsSaveBtn.disabled = true;
     awShowStatus('warn', 'Saving...');
     try {

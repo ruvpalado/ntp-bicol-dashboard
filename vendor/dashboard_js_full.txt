@@ -133,13 +133,12 @@ const AWARD_CATEGORIES = [
 ];
 // Rank the category's own unit (facilities for DSTB/DRTB TSR + TPT, municipalities for Case
 // Notification) by the metric, highest first - mirror of lib/awardRanking.js's unitCandidates().
-// With a province this is that province's ranking (key prefix "F|province|" / "M|province|"); with no
-// province it is the whole region's ranking across every province (prefix "F|" / "M|"), disambiguating
-// same-named units across provinces by appending the province name.
+// This is the PROVINCIAL view: restricted to the given province's own units (key prefix
+// "F|province|" / "M|province|"), so a province is required - mirror of lib/awardRanking.js.
 function awardUnitCandidates(catDef, province){
   const pk = catDef.provinceUnit==="municipality" ? "M" : "F";
   const nameIdx = catDef.provinceUnit==="municipality" ? 2 : 3;
-  const prefix = province ? (pk+"|"+province+"|") : (pk+"|");
+  const prefix = pk+"|"+province+"|";
   const out = [];
   for(const key in NODES){
     if(!key.startsWith(prefix)) continue;
@@ -149,9 +148,8 @@ function awardUnitCandidates(catDef, province){
     const parts = key.split("|");
     const rawName = parts[nameIdx]||"";
     const provKey = parts[1];
-    const name = province ? titleCase(rawName)
-      : (titleCase(rawName) + " (" + (LABEL[provKey]||titleCase(provKey)) + ")");
-    const item = {key, name, value:v};
+    const name = titleCase(rawName) + " (" + (LABEL[provKey]||titleCase(provKey)) + ")";
+    const item = {key, name, value:v, province:provKey};
     if(catDef.tiebreak){
       const tb = catDef.tiebreak(n);
       item.cureValue = tb.cureValue;
@@ -171,10 +169,43 @@ function awardUnitCandidates(catDef, province){
     return 0;
   });
 }
-// Both "region" and "province" ranking levels rank the category's own unit. "region" runs across the
-// whole region (no province filter); "province" is restricted to the selected province.
+// Rank PROVINCES (the "P|" nodes) by the category's metric, highest first - mirror of
+// lib/awardRanking.js's provinceCandidates(). This is the REGIONAL view: provinces rank against each
+// other by their own aggregated accomplishments (TSR / CNR / TPT each roll up to province level).
+function awardProvinceCandidates(catDef){
+  const out = [];
+  for(const key in NODES){
+    if(!String(key).startsWith("P|")) continue;
+    const provKey = key.slice(2);
+    const n = periodNode(NODES[key]);
+    const v = catDef.metric(n);
+    if(v==null) continue;
+    const item = {key, name:(LABEL[provKey]||titleCase(provKey)), value:v, province:provKey};
+    if(catDef.tiebreak){
+      const tb = catDef.tiebreak(n);
+      item.cureValue = tb.cureValue;
+      item.bactCount = tb.bactCount;
+    }
+    out.push(item);
+  }
+  return out.sort((a,b)=>{
+    if(b.value-a.value!==0) return b.value-a.value;
+    if(catDef.tiebreak){
+      const aHasCure=a.cureValue==null?0:1, bHasCure=b.cureValue==null?0:1;
+      if(bHasCure-aHasCure!==0) return bHasCure-aHasCure;
+      if(b.cureValue-a.cureValue!==0) return b.cureValue-a.cureValue;
+      if(b.bactCount-a.bactCount!==0) return b.bactCount-a.bactCount;
+    }
+    return 0;
+  });
+}
+// "region" ranks the six provinces (+ Naga City) against each other by their own aggregated
+// accomplishments; "province" ranks the selected province's units - municipalities for Case
+// Notification, facilities for the TSR/TPT categories. Mirror of lib/awardRanking.js's candidatesFor().
 function awardCandidates(catDef, scope, province){
-  return awardUnitCandidates(catDef, scope==="region" ? null : province);
+  if(scope==="region") return awardProvinceCandidates(catDef);
+  if(!province) return [];
+  return awardUnitCandidates(catDef, province);
 }
 // NTP_AWARDS is keyed by recognition period (year), e.g. {"2026": {region:{...}, provinces:{...}}} -
 // always shows the most recent period. Populated either by the live site's admin panel (persisted via
