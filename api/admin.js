@@ -168,12 +168,7 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
         </ul>
       </li>
       <li data-target="sec-history"><a><span class="num">4</span> Upload History</a></li>
-      <li class="parent"><a><span class="num">5</span> Team Accounts <span class="chev">&#9656;</span></a>
-        <ul class="sub">
-          <li data-target="sec-pending"><a><span class="num">5.1</span> Pending</a></li>
-          <li data-target="sec-active"><a><span class="num">5.2</span> Active</a></li>
-        </ul>
-      </li>
+      <li data-target="sec-active"><a><span class="num">5</span> Team Accounts</a></li>
     </ul>
   </nav>
   <div class="content-area">
@@ -319,24 +314,15 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     </div>` : ""}
   </div>
 
-  <div class="card" id="sec-pending">
-    <h2>Pending</h2>
-    <div class="standings-hint">
-      Accounts request access via the login page&rsquo;s &ldquo;Create an account&rdquo; link. New requests appear
-      below once they&rsquo;ve set a password &mdash; approve or reject them here.
-    </div>
-    <div id="usersWarnBanner" class="banner warn"></div>
-    <div id="usersStatusBanner" class="banner" style="margin-top:0;margin-bottom:14px;"></div>
-    <div id="pendingUsersBox"></div>
-  </div>
-
   <div class="card" id="sec-active">
-    <h2>Active</h2>
+    <h2>Team Accounts</h2>
     <div class="standings-hint">
-      Approved accounts that can sign in. Active accounts can be revoked at any time. The shared admin
-      password (used to sign in right now if you&rsquo;re not using an individual account) still works
-      regardless of anything here.
+      Accounts request access via the login page&rsquo;s &ldquo;Create an account&rdquo; link and are
+      approved by an admin. Approved accounts appear below and can be revoked at any time. The shared
+      admin password (used to sign in right now if you&rsquo;re not using an individual account) still
+      works regardless of anything here.
     </div>
+    <div id="usersStatusBanner" class="banner" style="margin-top:0;margin-bottom:14px;"></div>
     <div id="activeUsersBox"></div>
   </div>
 </div>
@@ -967,10 +953,8 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
   }
 
   // ---------------------------------------------------------------- Team Accounts panel
-  var pendingUsersBox = document.getElementById('sec-pending');
-  var activeUsersBox = document.getElementById('sec-active');
+  var activeUsersBox = document.getElementById('activeUsersBox');
   var usersStatusBanner = document.getElementById('usersStatusBanner');
-  var usersWarnBanner = document.getElementById('usersWarnBanner');
 
   function usersShowStatus(cls, msg) {
     usersStatusBanner.className = 'banner ' + cls + ' show';
@@ -1020,23 +1004,16 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
       var res = await fetch('/api/users', { cache: 'no-store' });
       var data = await res.json();
       if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
-      if (!data.blobConfigured) {
-        usersWarnBanner.className = 'banner warn show';
-        usersWarnBanner.textContent = 'No Blob store is connected, so accounts cannot persist yet.';
-      }
       var users = data.users || [];
-      var pending = users.filter(function (u) { return u.status === 'pending_approval' || u.status === 'pending_setup'; });
       var active = users.filter(function (u) { return u.status === 'active'; });
       var other = users.filter(function (u) { return u.status === 'rejected' || u.status === 'revoked'; });
 
-      pendingUsersBox.innerHTML = '<div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px;">PENDING (' + pending.length + ')</div>' +
-        (pending.length ? pending.map(function (u) {
-          var actions = u.status === 'pending_approval'
-            ? '<button type="button" class="btn-sm" data-approve="' + esc(u.email) + '">Approve</button>' +
-              '<button type="button" class="btn-sm btn-danger" data-reject="' + esc(u.email) + '">Reject</button>'
-            : '<span class="slot-meta">Nothing to do yet - waiting on them.</span>';
-          return userRowHtml(u, actions);
-        }).join('') : '<div class="slot-meta">No pending requests.</div>');
+      if (!data.blobConfigured) {
+        activeUsersBox.innerHTML = '<div class="slot-meta">' +
+          'No Blob store is connected, so accounts cannot persist yet.' +
+          '</div>';
+        return;
+      }
 
       activeUsersBox.innerHTML = '<div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px;">ACTIVE (' + active.length + ')</div>' +
         (active.length ? active.map(function (u) {
@@ -1045,17 +1022,11 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
         (other.length ? '<div style="font-size:12px;font-weight:700;color:var(--muted);margin:14px 0 8px;">REJECTED / REVOKED (' + other.length + ')</div>' +
           other.map(function (u) { return userRowHtml(u, ''); }).join('') : '');
 
-      Array.prototype.forEach.call(document.querySelectorAll('[data-approve]'), function (btn) {
-        btn.addEventListener('click', function () { usersAction(btn.getAttribute('data-approve'), 'approve'); });
-      });
-      Array.prototype.forEach.call(document.querySelectorAll('[data-reject]'), function (btn) {
-        btn.addEventListener('click', function () { usersAction(btn.getAttribute('data-reject'), 'reject', 'Reject this account request?'); });
-      });
       Array.prototype.forEach.call(document.querySelectorAll('[data-revoke]'), function (btn) {
         btn.addEventListener('click', function () { usersAction(btn.getAttribute('data-revoke'), 'revoke', 'Revoke this account? They will no longer be able to sign in.'); });
       });
     } catch (err) {
-      pendingUsersBox.innerHTML = '<div class="slot-meta">Could not load accounts: ' + esc(err.message) + '</div>';
+      activeUsersBox.innerHTML = '<div class="slot-meta">Could not load accounts: ' + esc(err.message) + '</div>';
     }
   }
   loadUsersPanel();
