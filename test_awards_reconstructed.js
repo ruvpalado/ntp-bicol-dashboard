@@ -45,11 +45,11 @@ function mockRes() {
   const fakeKpi = {
     meta: { operational_provinces: ["ALBAY", "MASBATE"] },
     nodes: {
-      "P|ALBAY": { cnr: { rate_per_100k: 120 }, tsr: { dstb: { rate: 88 }, drtb: { rate: 70 } }, tpt: { coverage_pct: 55 } },
-      "P|MASBATE": { cnr: { rate_per_100k: 200 }, tsr: { dstb: { rate: 91 }, drtb: { rate: 60 } }, tpt: { coverage_pct: 40 } },
-      "M|ALBAY|LEGAZPI": { cnr: { rate_per_100k: 150 } },
-      "M|ALBAY|TABACO": { cnr: { rate_per_100k: 90 } },
-      "M|MASBATE|MASBATE CITY": { cnr: { rate_per_100k: 300 } },
+      "P|ALBAY": { cnr: { rate_per_100k: 120, notified: 500 }, targets: { ctbn: 900 }, tsr: { dstb: { rate: 88 }, drtb: { rate: 70 } }, tpt: { coverage_pct: 55 } },
+      "P|MASBATE": { cnr: { rate_per_100k: 200, notified: 800 }, targets: { ctbn: 1000 }, tsr: { dstb: { rate: 91 }, drtb: { rate: 60 } }, tpt: { coverage_pct: 40 } },
+      "M|ALBAY|LEGAZPI": { cnr: { rate_per_100k: 150, notified: 120 }, targets: { ctbn: 200 } },
+      "M|ALBAY|TABACO": { cnr: { rate_per_100k: 90, notified: 60 }, targets: { ctbn: 100 } },
+      "M|MASBATE|MASBATE CITY": { cnr: { rate_per_100k: 300, notified: 150 }, targets: { ctbn: 150 } },
       "F|ALBAY|LEGAZPI|Fac A": { tsr: { dstb: { rate: 90, by_bact_status: { "BACTERIOLOGICALLY CONFIRMED": 5 } }, cure_dstb: { rate: 80 }, drtb: { rate: 70 }, mn: { rate: 70 } }, tpt: { coverage_pct: 55 } },
       "F|ALBAY|TABACO|Fac B": { tsr: { dstb: { rate: 90, by_bact_status: { "BACTERIOLOGICALLY CONFIRMED": 9 } }, cure_dstb: { rate: 80 }, drtb: { rate: 60 }, mn: { rate: 70 } }, tpt: { coverage_pct: 40 } },
       "F|MASBATE|MASBATE CITY|Fac C": { tsr: { dstb: { rate: 92, by_bact_status: { "BACTERIOLOGICALLY CONFIRMED": 3 } }, cure_dstb: { rate: 88 }, drtb: { rate: 60 }, mn: { rate: 70 } }, tpt: { coverage_pct: 40 } },
@@ -59,7 +59,7 @@ function mockRes() {
   // contract (no top-15 cap - the admin awardee standings table shows every municipality/facility)
   // is actually exercised: ALBAY then has 18 municipalities total.
   for (let i = 1; i <= 16; i++) {
-    fakeKpi.nodes["M|ALBAY|MUNICIPALITY " + i] = { cnr: { rate_per_100k: 10 + i } };
+    fakeKpi.nodes["M|ALBAY|MUNICIPALITY " + i] = { cnr: { rate_per_100k: 10 + i, notified: i * 5 }, targets: { ctbn: i * 10 } };
   }
   const { saveKpi } = require(BASE + "lib/kpiStore");
   await saveKpi(fakeKpi);
@@ -98,6 +98,18 @@ function mockRes() {
       c && c[0] && /LEGAZPI/i.test(c[0].name) && c[1] && /TABACO/i.test(c[1].name), JSON.stringify(c));
     check("province CNR candidates return ALL 18 municipalities - no top-15 truncation",
       c && c.length === 18, JSON.stringify(c && c.length));
+  }
+
+  // 3b. CNR candidates carry Case Notified and Case to be Notified alongside the rate.
+  {
+    const req = mockReq("GET", "/api/awards?candidates=1&category=cnr&scope=region");
+    const res = mockRes();
+    await awardsHandler(req, res);
+    const c = res._body && res._body.candidates;
+    check("region CNR candidates carry cnrNotified and cnrTarget (MASBATE: 800/1000; ALBAY: 500/900)",
+      c && c[0] && c[0].key === "P|MASBATE" && c[0].cnrNotified === 800 && c[0].cnrTarget === 1000
+        && c[1] && c[1].key === "P|ALBAY" && c[1].cnrNotified === 500 && c[1].cnrTarget === 900,
+      JSON.stringify(c));
   }
 
   // 4. DSTB Treatment Success ranks facilities at the PROVINCIAL level (provinceUnit facility), and

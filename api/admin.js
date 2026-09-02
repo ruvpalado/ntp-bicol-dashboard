@@ -448,18 +448,22 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
   // Renders the standings table. Columns vary by category:
   // - TSR categories (dstb_tsr/drtb_tsr): Success Rate, Cure Rate, Bacteriologically Confirmed
   // - TPT (tpt): Success Rate, TPT Accomplish, TPT Target
-  // - Other categories (cnr): just Success Rate
+  // - CNR (cnr): Case Notification Rate (no %), Case Notified, Case to be Notified
   function renderCandidatesTable(candidates) {
     const unit = currentUnitLabel();
-    const isTpt = awCategory.value === 'tpt';
-    const isTsr = awCategory.value === 'dstb_tsr' || awCategory.value === 'drtb_tsr';
-    const colCount = isTpt ? 5 : (isTsr ? 5 : 3);
+    const cat = awCategory.value;
+    const isTpt = cat === 'tpt';
+    const isTsr = cat === 'dstb_tsr' || cat === 'drtb_tsr';
+    const isCnr = cat === 'cnr';
+    const colCount = isTpt ? 5 : (isTsr ? 5 : (isCnr ? 5 : 3));
     document.getElementById('awTableUnit').textContent = '(' + unit + ')';
 
     // Build header
     const thead = document.getElementById('awCandidatesHead');
     if (isTpt) {
       thead.innerHTML = '<tr><th>Rank</th><th>Name</th><th>Success Rate</th><th>TPT Accomplish</th><th>TPT Target</th></tr>';
+    } else if (isCnr) {
+      thead.innerHTML = '<tr><th>Rank</th><th>Name</th><th>Case Notification Rate</th><th>Case Notified</th><th>Case to be Notified</th></tr>';
     } else if (isTsr) {
       thead.innerHTML = '<tr><th>Rank</th><th>Name</th><th>Success Rate</th><th>Cure Rate</th><th>Bacteriologically Confirmed</th></tr>';
     } else {
@@ -472,10 +476,20 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
       return;
     }
     tbody.innerHTML = candidates.map((c, i) => {
+      let rateCell;
+      if (isCnr) {
+        // CNR is a rate per 100,000 population - shown without the % sign.
+        rateCell = '<td>' + (c.value != null ? c.value.toFixed(1) : '—') + '</td>';
+      } else {
+        rateCell = '<td>' + (c.value != null ? (c.value.toFixed(1) + '%') : '—') + '</td>';
+      }
       let cells = '<td>' + (i + 1) + '</td>'
         + '<td>' + (c.name || c.key) + '</td>'
-        + '<td>' + (c.value != null ? (c.value.toFixed(1) + '%') : '—') + '</td>';
-      if (isTpt) {
+        + rateCell;
+      if (isCnr) {
+        cells += '<td>' + (c.cnrNotified != null ? c.cnrNotified.toLocaleString() : '—') + '</td>'
+          + '<td>' + (c.cnrTarget != null ? c.cnrTarget.toLocaleString() : '—') + '</td>';
+      } else if (isTpt) {
         cells += '<td>' + (c.tptAccomplish != null ? c.tptAccomplish.toLocaleString() : '—') + '</td>'
           + '<td>' + (c.tptTarget != null ? c.tptTarget.toLocaleString() : '—') + '</td>';
       } else if (isTsr) {
