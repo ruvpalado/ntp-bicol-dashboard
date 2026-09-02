@@ -10,5 +10,8 @@
     "@vercel/blob": "^2.5.0",
     "express": "^4.22.2",
     "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "jsdom": "^24.1.3"
   }
 }

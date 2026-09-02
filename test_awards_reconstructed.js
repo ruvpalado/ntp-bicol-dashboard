@@ -49,6 +49,10 @@ function mockRes() {
       "P|MASBATE": { cnr: { rate_per_100k: 200 }, tsr: { dstb: { rate: 91 }, drtb: { rate: 60 } }, tpt: { coverage_pct: 40 } },
       "M|ALBAY|LEGAZPI": { cnr: { rate_per_100k: 150 } },
       "M|ALBAY|TABACO": { cnr: { rate_per_100k: 90 } },
+      "M|MASBATE|MASBATE CITY": { cnr: { rate_per_100k: 300 } },
+      "F|ALBAY|LEGAZPI|Fac A": { tsr: { dstb: { rate: 90, by_bact_status: { "BACTERIOLOGICALLY CONFIRMED": 5 } }, cure_dstb: { rate: 80 }, drtb: { rate: 70 }, mn: { rate: 70 } }, tpt: { coverage_pct: 55 } },
+      "F|ALBAY|TABACO|Fac B": { tsr: { dstb: { rate: 90, by_bact_status: { "BACTERIOLOGICALLY CONFIRMED": 9 } }, cure_dstb: { rate: 80 }, drtb: { rate: 60 }, mn: { rate: 70 } }, tpt: { coverage_pct: 40 } },
+      "F|MASBATE|MASBATE CITY|Fac C": { tsr: { dstb: { rate: 92, by_bact_status: { "BACTERIOLOGICALLY CONFIRMED": 3 } }, cure_dstb: { rate: 88 }, drtb: { rate: 60 }, mn: { rate: 70 } }, tpt: { coverage_pct: 40 } },
     },
   };
   const { saveKpi } = require(BASE + "lib/kpiStore");
@@ -65,16 +69,20 @@ function mockRes() {
     check("empty awards state is {} before anything is assigned", res._body && JSON.stringify(res._body.awards) === "{}", JSON.stringify(res._body));
   }
 
-  // 2. Region-scope candidates rank provinces by CNR rate, highest first, MASBATE (200) before ALBAY (120).
+  // 2. Region-scope candidates rank the category's own unit across all provinces: for CNR that is
+  //    municipalities region-wide, highest first - MASBATE City (300) before LEGAZPI (150) before
+  //    TABACO (90) - with the province name appended to disambiguate across the region.
   {
     const req = mockReq("GET", "/api/awards?candidates=1&category=cnr&scope=region");
     const res = mockRes();
     await awardsHandler(req, res);
     const c = res._body && res._body.candidates;
-    check("region CNR candidates are ranked highest-first (MASBATE then ALBAY)",
-      c && c[0] && c[0].key === "MASBATE" && c[1] && c[1].key === "ALBAY", JSON.stringify(c));
-    check("candidate names are human-readable labels, not raw keys",
-      c && c[0].name === "Masbate", JSON.stringify(c));
+    check("region CNR candidates rank every municipality across the region (MASBATE CITY then LEGAZPI then TABACO)",
+      c && c[0] && c[0].key === "M|MASBATE|MASBATE CITY"
+        && c[1] && c[1].key === "M|ALBAY|LEGAZPI"
+        && c[2] && c[2].key === "M|ALBAY|TABACO", JSON.stringify(c));
+    check("candidate names are human-readable labels with province disambiguation",
+      c && c[0].name === "Masbate City (Masbate)" && c[1].name === "Legazpi (Albay)", JSON.stringify(c));
   }
 
   // 3. Province-scope CNR candidates rank municipalities within ALBAY (municipality is CNR's provinceUnit).
@@ -87,7 +95,30 @@ function mockRes() {
       c && c[0] && /LEGAZPI/i.test(c[0].name) && c[1] && /TABACO/i.test(c[1].name), JSON.stringify(c));
   }
 
-  // 4. POST without auth is rejected.
+  // 4. DSTB Treatment Success ranks facilities at BOTH ranking levels. Region ranks all facilities
+  //    across the region, highest rate first (Fac C 92); ties on rate break by Cure Rate, then by
+  //    Bacteriologically Confirmed count (Fac B over Fac A: equal 90% and 80% cure, B has 9 vs 5).
+  {
+    const req = mockReq("GET", "/api/awards?candidates=1&category=dstb_tsr&scope=region");
+    const res = mockRes();
+    await awardsHandler(req, res);
+    const c = res._body && res._body.candidates;
+    check("region DSTB candidates rank every facility across the region with tiebreakers",
+      c && c[0] && /Fac C/i.test(c[0].name)
+        && c[1] && /Fac B/i.test(c[1].name)
+        && c[2] && /Fac A/i.test(c[2].name)
+        && c[1].cureValue === 80 && c[1].bactCount === 9 && c[2].bactCount === 5, JSON.stringify(c));
+  }
+  {
+    const req = mockReq("GET", "/api/awards?candidates=1&category=dstb_tsr&scope=province&province=ALBAY");
+    const res = mockRes();
+    await awardsHandler(req, res);
+    const c = res._body && res._body.candidates;
+    check("province DSTB candidates rank only that province's facilities with tiebreakers",
+      c && c.length === 2 && /Fac B/i.test(c[0].name) && /Fac A/i.test(c[1].name), JSON.stringify(c));
+  }
+
+  // 5. POST without auth is rejected.
   {
     const req = mockReq("POST", "/api/awards", { period: "2026", scope: "region", category: "cnr", level: "gold", awardee: { key: "MASBATE", name: "Masbate", value: 200 } });
     const res = mockRes();
@@ -96,7 +127,7 @@ function mockRes() {
     check("POST without a session is rejected (401)", res._status === 401, JSON.stringify(res._body));
   }
 
-  // 5. A save actually persists and is readable back (bypassing auth by calling the store directly,
+  // 6. A save actually persists and is readable back (bypassing auth by calling the store directly,
   //    since exercising the real cookie-auth path isn't this test's concern - api/admin.js's own
   //    auth is covered by test_accounts.js).
   {
@@ -115,7 +146,7 @@ function mockRes() {
       JSON.stringify(res._body));
   }
 
-  // 6. Clearing a slot (awardee: null) removes it rather than storing a null placeholder.
+  // 7. Clearing a slot (awardee: null) removes it rather than storing a null placeholder.
   {
     const { setAwardSlot, getCurrentAwards } = require(BASE + "lib/awardsStore");
     await setAwardSlot({ period: "2026", scope: "region", category: "cnr", level: "gold", awardee: null });

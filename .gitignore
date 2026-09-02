@@ -5,3 +5,6 @@ node_modules/
 # Local secrets - never commit or upload these. ADMIN_PASSWORD and SESSION_SECRET
 # belong in the Vercel project's environment variables, not in the repo.
 .env*
+
+.vercel
+.env*

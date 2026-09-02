@@ -105,10 +105,11 @@ module.exports = async (req, res) => {
       }));
       return;
     }
-    if (!email.configured()) {
+    const emailMissing = email.missingConfig();
+    if (emailMissing.length) {
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.status(500).send(signupFormHtml({
-        error: "Server is missing email configuration (RESEND_API_KEY/MAIL_FROM) - account setup emails cannot be sent yet. Contact your administrator.",
+        error: `Server is missing email configuration (${emailMissing.join(" / ")}) - account setup emails cannot be sent yet. Contact your administrator.`,
         values: body,
       }));
       return;

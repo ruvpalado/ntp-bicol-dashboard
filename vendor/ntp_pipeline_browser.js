@@ -3008,6 +3008,17 @@ function runPipeline(workbook, progressCb) {
   const pictRows = pictLong ? pictLong.total : [];
   const pictByPeriod = pictLong ? pictLong.byPeriod : [];
 
+  // Normalize Province for Naga City facilities in TF and PICT rows: the source data's
+  // "Province/HUC" column may label Naga City facilities under "CAMARINES SUR" (their parent
+  // province), but the dashboard routes Naga City as its own top-level entity (P|NAGA CITY).
+  // Ensure the Province field matches so filterByCols({ Province: "NAGA CITY" }) finds them.
+  for (const row of [...tf, ...pictRows]) {
+    if (row.Facility && lookupProv(row.Facility) === "NAGA CITY") row.Province = "NAGA CITY";
+  }
+  for (const row of [...tfByPeriod, ...pictByPeriod]) {
+    if (row.Facility && lookupProv(row.Facility) === "NAGA CITY") row.Province = "NAGA CITY";
+  }
+
   notify("Computing KPIs across the full hierarchy...");
   function filterRows(rows, monthSet) { return monthSet ? rows.filter(r => monthSet.has(r.Month)) : rows; }
 

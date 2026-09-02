@@ -1,5 +1,15 @@
-const { SESSION_COOKIE, SESSION_MAX_AGE_MS, createSessionToken } = require("../lib/auth");
+const { SESSION_COOKIE, SESSION_MAX_AGE_MS, createSessionToken, safeEqual } = require("../lib/auth");
 const userStore = require("../lib/userStore");
+
+// Only allow same-site relative redirect targets. The `next` parameter is user-supplied (query
+// string / hidden form field), so a bare pass-through would be an open redirect (phishing): after
+// login an attacker-supplied ?next=https://evil.com would send the victim there. Accept only a
+// single leading "/" that is NOT "//" (protocol-relative) and contains no CR/LF or scheme colon.
+function safeRedirectTarget(raw) {
+  const v = String(raw || "").trim();
+  if (/^\/(?!\/)/.test(v) && !/[\r\n]/.test(v)) return v;
+  return "/admin";
+}
 
 function loginPageHtml({ error, next }) {
   return `<!DOCTYPE html>
@@ -56,7 +66,7 @@ function loginPageHtml({ error, next }) {
 module.exports = async (req, res) => {
   if (req.method === "GET") {
     const error = req.query.error === "1";
-    const next = typeof req.query.next === "string" ? req.query.next : "/admin";
+    const next = safeRedirectTarget(typeof req.query.next === "string" ? req.query.next : "/admin");
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.status(200).send(loginPageHtml({ error, next }));
     return;
@@ -66,7 +76,7 @@ module.exports = async (req, res) => {
     const body = req.body || {};
     const password = body.password;
     const loginEmail = String(body.email || "").trim();
-    const next = body.next || "/admin";
+    const next = safeRedirectTarget(body.next || "/admin");
 
     if (!process.env.SESSION_SECRET) {
       res.status(500).send("Server is missing SESSION_SECRET - set it in the Vercel project's environment variables.");
@@ -76,7 +86,7 @@ module.exports = async (req, res) => {
     // The shared master password still works exactly as before, checked first and regardless of
     // whatever (if anything) is in the email field - this is what keeps the very first admin able to
     // sign in and approve individual accounts, with no chicken-and-egg setup problem.
-    if (process.env.ADMIN_PASSWORD && password === process.env.ADMIN_PASSWORD) {
+    if (process.env.ADMIN_PASSWORD && safeEqual(password, process.env.ADMIN_PASSWORD)) {
       const token = createSessionToken("master");
       res.setHeader(
         "Set-Cookie",

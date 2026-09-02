@@ -111,27 +111,35 @@ let state = { page:"REGION", province:null, muni:"ALL", facility:"ALL", module:"
 // fields already shown elsewhere in this dashboard (CNR rate, TSR rates, TPT coverage), so standings
 // always match what's on screen - this is the same real data ranked and compared, nothing fabricated.
 // fmt1/pctS are defined further below as function declarations, which are hoisted - safe to reference here.
+// Treats identical Treatment Success Rates: Cure Rate first (Cured / bact-confirmed or cohort x100),
+// then the number of Bacteriologically Confirmed cases (higher first) - mirror of lib/awardRanking.js's
+// tsrTiebreak(). Reads the then-current values off the same node the primary metric came from.
+function tsrTiebreak(node, type){
+  const c = (node&&node.tsr)?node.tsr["cure_"+type]:null;
+  const cureValue = (c&&typeof c.rate==="number")?c.rate:null;
+  const byStatus = (node&&node.tsr&&node.tsr[type]&&node.tsr[type].by_bact_status)||{};
+  let bactCount=0;
+  for(const status in byStatus){
+    const s=String(status).toUpperCase();
+    if(s.indexOf("BACTERIOLOG")!==-1 && s.indexOf("CLINIC")===-1) bactCount+=byStatus[status];
+  }
+  return {cureValue, bactCount};
+}
 const AWARD_CATEGORIES = [
   {key:"cnr", label:"Case Notification", metric:n=>(n&&n.cnr)?n.cnr.rate_per_100k:null, metricLabel:"CNR per 100,000 population", provinceUnit:"municipality", fmtVal:v=>fmt1(v)},
-  {key:"dstb_tsr", label:"DSTB Treatment Success", metric:n=>(n&&n.tsr)?n.tsr.dstb.rate:null, metricLabel:"DSTB Treatment Success Rate", provinceUnit:"facility", fmtVal:v=>pctS(v)},
-  {key:"drtb_tsr", label:"DRTB Treatment Success", metric:n=>(n&&n.tsr)?n.tsr.drtb.rate:null, metricLabel:"DRTB Treatment Success Rate", provinceUnit:"facility", fmtVal:v=>pctS(v)},
+  {key:"dstb_tsr", label:"DSTB Treatment Success", metric:n=>(n&&n.tsr)?n.tsr.dstb.rate:null, metricLabel:"DSTB Treatment Success Rate", provinceUnit:"facility", fmtVal:v=>pctS(v), tiebreak:n=>tsrTiebreak(n,"dstb")},
+  {key:"drtb_tsr", label:"DRTB Treatment Success", metric:n=>(n&&n.tsr)?n.tsr.drtb.rate:null, metricLabel:"DRTB Treatment Success Rate", provinceUnit:"facility", fmtVal:v=>pctS(v), tiebreak:n=>tsrTiebreak(n,"drtb")},
   {key:"tpt", label:"TB Preventive Treatment", metric:n=>(n&&n.tpt)?n.tpt.coverage_pct:null, metricLabel:"TPT Coverage Rate", provinceUnit:"facility", fmtVal:v=>pctS(v)},
 ];
-// Region-level candidate pool: every operational province/city (OPS already includes "NAGA CITY"
-// alongside the 6 real provinces - see const OPS above - so it competes as its own top-level unit,
-// matching how it already gets its own tab/page throughout this dashboard).
-function awardRegionCandidates(catDef){
-  return OPS.map(p => {
-    const n = periodNode(NODES["P|"+p]);
-    const v = catDef.metric(n);
-    return v==null ? null : {key:p, name:LABEL[p]||titleCase(p), value:v};
-  }).filter(Boolean).sort((a,b)=>b.value-a.value);
-}
-// Province-level candidate pool: municipalities (Case Notification) or facilities (DSTB/DRTB TSR,
-// TPT) within the given province only - scans NODES for the matching "M|<province>|" or
-// "F|<province>|" key prefix, same keying convention used throughout the rest of this file.
-function awardProvinceCandidates(catDef, province){
-  const prefix = catDef.provinceUnit==="municipality" ? ("M|"+province+"|") : ("F|"+province+"|");
+// Rank the category's own unit (facilities for DSTB/DRTB TSR + TPT, municipalities for Case
+// Notification) by the metric, highest first - mirror of lib/awardRanking.js's unitCandidates().
+// With a province this is that province's ranking (key prefix "F|province|" / "M|province|"); with no
+// province it is the whole region's ranking across every province (prefix "F|" / "M|"), disambiguating
+// same-named units across provinces by appending the province name.
+function awardUnitCandidates(catDef, province){
+  const pk = catDef.provinceUnit==="municipality" ? "M" : "F";
+  const nameIdx = catDef.provinceUnit==="municipality" ? 2 : 3;
+  const prefix = province ? (pk+"|"+province+"|") : (pk+"|");
   const out = [];
   for(const key in NODES){
     if(!key.startsWith(prefix)) continue;
@@ -139,13 +147,34 @@ function awardProvinceCandidates(catDef, province){
     const v = catDef.metric(n);
     if(v==null) continue;
     const parts = key.split("|");
-    const name = catDef.provinceUnit==="municipality" ? titleCase(parts[2]) : titleCase(parts[3]);
-    out.push({key, name, value:v});
+    const rawName = parts[nameIdx]||"";
+    const provKey = parts[1];
+    const name = province ? titleCase(rawName)
+      : (titleCase(rawName) + " (" + (LABEL[provKey]||titleCase(provKey)) + ")");
+    const item = {key, name, value:v};
+    if(catDef.tiebreak){
+      const tb = catDef.tiebreak(n);
+      item.cureValue = tb.cureValue;
+      item.bactCount = tb.bactCount;
+    }
+    out.push(item);
   }
-  return out.sort((a,b)=>b.value-a.value);
+  // Facility TSR categories break rate ties by Cure Rate, then by Bacteriologically Confirmed count.
+  return out.sort((a,b)=>{
+    if(b.value-a.value!==0) return b.value-a.value;
+    if(catDef.tiebreak){
+      const aHasCure=a.cureValue==null?0:1, bHasCure=b.cureValue==null?0:1;
+      if(bHasCure-aHasCure!==0) return bHasCure-aHasCure;
+      if(b.cureValue-a.cureValue!==0) return b.cureValue-a.cureValue;
+      if(b.bactCount-a.bactCount!==0) return b.bactCount-a.bactCount;
+    }
+    return 0;
+  });
 }
+// Both "region" and "province" ranking levels rank the category's own unit. "region" runs across the
+// whole region (no province filter); "province" is restricted to the selected province.
 function awardCandidates(catDef, scope, province){
-  return scope==="region" ? awardRegionCandidates(catDef) : awardProvinceCandidates(catDef, province);
+  return awardUnitCandidates(catDef, scope==="region" ? null : province);
 }
 // NTP_AWARDS is keyed by recognition period (year), e.g. {"2026": {region:{...}, provinces:{...}}} -
 // always shows the most recent period. Populated either by the live site's admin panel (persisted via

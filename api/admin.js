@@ -218,9 +218,9 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
         <input type="text" id="awPeriod" value="${new Date().getFullYear()}" style="width:100px;">
       </div>
       <div>
-        <label for="awScope">Scope</label>
+        <label for="awScope">Ranking Level</label>
         <select id="awScope">
-          <option value="region">Regional (top provinces)</option>
+          <option value="region">Regional</option>
           <option value="province">Provincial</option>
         </select>
       </div>
@@ -243,7 +243,22 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
       <div class="award-level-row"><span class="medal silver">Silver</span><select id="awSilver"></select></div>
       <div class="award-level-row"><span class="medal bronze">Bronze</span><select id="awBronze"></select></div>
     </div>
-    <button id="awardsSaveBtn" type="button">Save Awardees</button>
+    <div class="standings-hint" style="margin-top:14px;">Standings by <span id="awTableUnit">—</span>, ranked highest-first.</div>
+    <div style="max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:10px;">
+      <table class="hist" style="margin:0;">
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Name</th>
+            <th>Success Rate</th>
+            <th>Cure Rate</th>
+            <th>Bacteriologically Confirmed</th>
+          </tr>
+        </thead>
+        <tbody id="awCandidatesBody"><tr><td colspan="5" class="slot-meta">Loading standings...</td></tr></tbody>
+      </table>
+    </div>
+    <button id="awardsSaveBtn" type="button" style="margin-top:14px;">Save Awardees</button>
     <div id="awardsStatusBanner" class="banner" style="margin-top:14px;"></div>
   </div>
 
@@ -300,7 +315,6 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
   }
 
   function currentUnitLabel() {
-    if (awScope.value !== 'province') return 'province';
     const opt = awCategory.options[awCategory.selectedIndex];
     return (opt && opt.getAttribute('data-unit')) || 'facility';
   }
@@ -332,13 +346,38 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     selectEl.innerHTML = html;
   }
 
+  // Renders the standings table with Success Rate, Cure Rate and Bacteriologically Confirmed count
+  // alongside the ranking. Cure Rate and Bacteriologically Confirmed only apply to the facility-level
+  // TSR categories (dstb_tsr/drtb_tsr); for other categories/scopes those columns show a dash.
+  function renderCandidatesTable(candidates) {
+    const unit = currentUnitLabel();
+    document.getElementById('awTableUnit').textContent = '(' + unit + ')';
+    const tbody = document.getElementById('awCandidatesBody');
+    if (!candidates.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="slot-meta">No candidates to rank for this selection.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = candidates.map((c, i) => {
+      const hasTiebreak = c.cureValue != null || (c.bactCount != null && c.bactCount !== 0);
+      const cure = c.cureValue != null ? (c.cureValue.toFixed(1) + '%') : (hasTiebreak ? '—' : '—');
+      const bact = c.bactCount != null ? (c.bactCount + '') : (hasTiebreak ? '—' : '—');
+      return '<tr>'
+        + '<td>' + (i + 1) + '</td>'
+        + '<td>' + (c.name || c.key) + '</td>'
+        + '<td>' + (c.value != null ? (c.value.toFixed(1) + '%') : '—') + '</td>'
+        + '<td>' + cure + '</td>'
+        + '<td>' + bact + '</td>'
+        + '</tr>';
+    }).join('');
+  }
+
   async function loadAwardPanel() {
     const scope = awScope.value;
     const province = scope === 'province' ? awProvince.value : '';
     const category = awCategory.value;
     awardsUnitHint.textContent = scope === 'region'
-      ? 'Ranks the 6 provinces + Naga City against each other.'
-      : 'Ranks by ' + currentUnitLabel() + ' within the selected province.';
+      ? 'Ranks every ' + currentUnitLabel() + ' across the whole region against each other.'
+      : 'Ranks the ' + currentUnitLabel() + 's within the selected province.';
     try {
       const candQuery = '/api/awards?candidates=1&category=' + encodeURIComponent(category)
         + '&scope=' + encodeURIComponent(scope) + (province ? '&province=' + encodeURIComponent(province) : '');
@@ -354,6 +393,7 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
       fillLevelSelect(awGold, candidates, catBoard.gold);
       fillLevelSelect(awSilver, candidates, catBoard.silver);
       fillLevelSelect(awBronze, candidates, catBoard.bronze);
+      renderCandidatesTable(candidates);
     } catch (err) {
       awShowStatus('err', 'Could not load standings: ' + err.message);
     }

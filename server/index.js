@@ -19,9 +19,24 @@
 const express = require("express");
 const { consolidate } = require("../lib/consolidate");
 const { saveKpi } = require("../lib/kpiStore");
+const { missingConfig } = require("../lib/email");
+const { safeEqual } = require("../lib/auth");
 
 const PORT = process.env.PORT || 8080;
 const AUTH_TOKEN = process.env.CONSOLIDATION_SERVER_TOKEN;
+
+// Email config is not used by this consolidation server itself (no outbound mail here), but it IS
+// required by the account-creation / password-reset Vercel functions. Surface a clear warning here
+// so a misconfigured deploy is spotted at boot instead of only when someone tries to sign up.
+const missingEmail = missingConfig();
+if (missingEmail.length) {
+  console.warn(
+    `WARN: email is not configured on this server (missing ${missingEmail.join(" / ")}). ` +
+    `The signup / forgot-password / reset-password endpoints deployed alongside this app will ` +
+    `refuse to send account-setup and reset emails until these are set in the Vercel project's ` +
+    `environment variables (see README).`
+  );
+}
 
 if (!AUTH_TOKEN) {
   console.error(
@@ -51,7 +66,7 @@ app.get("/health", (req, res) => {
 
 app.post("/consolidate", async (req, res) => {
   const provided = req.headers["x-internal-token"];
-  if (provided !== AUTH_TOKEN) {
+  if (!safeEqual(provided, AUTH_TOKEN)) {
     res.status(401).json({ ok: false, error: "Not authenticated." });
     return;
   }

@@ -69,20 +69,38 @@ falls back to whichever provincial file supplies it. The Population slot reads b
    ```bash
    vercel env add ADMIN_PASSWORD
    vercel env add SESSION_SECRET
-   vercel env add RESEND_API_KEY
-   vercel env add MAIL_FROM
    ```
    Choose "All Environments" (or at least Production) when prompted. Without `SESSION_SECRET` the
-   login page will tell you it is missing rather than failing silently.
+   login page will tell you it is missing rather than failing silently. For the email vars, see
+   `node scripts/setup-email-env.js` for a guided checklist.
    - `ADMIN_PASSWORD` is the shared master password - it always works and is what lets you approve
-     the very first individual account (see Access model below).
-   - `RESEND_API_KEY` / `MAIL_FROM` are for the individual-account emails (account setup, password
-     reset, approval notification). Sign up at [resend.com](https://resend.com) (free tier is plenty
-     for a staff-sized user base), and set `MAIL_FROM` to either their shared test address
-     (`onboarding@resend.dev`, works immediately but only reliably delivers to your own Resend
-     account's verified email) or `Some Name <noreply@yourdomain.com>` once you've verified a domain
-     in the Resend dashboard. Until these two are set, "Create an account" and "Forgot password" will
-     show a clear error instead of silently failing.
+     the very first individual account (see Access model below). Without it (or any active account)
+     you cannot sign in to `/admin` at all.
+
+   **Outbound email — pick ONE sender.**
+   - **Brevo (recommended — works from any server IP, no domain needed):**
+     ```bash
+     vercel env add BREVO_API_KEY     # from app.brevo.com/settings/keys/api (free: 300 emails/day)
+     vercel env add MAIL_FROM         # e.g. "NTP Bicol Dashboard <ruvpalado@gmail.com>"
+     ```
+     Verify that sender once in Brevo (Settings → Senders → click the confirmation email). Because
+     it's an HTTP API call, it is not subject to the SMTP IP blocks that Gmail applies to cloud
+     servers — so it works reliably from Vercel.
+   - **SMTP / Gmail App Password:**
+     ```bash
+     vercel env add SMTP_USER      # e.g. ruvpalado@gmail.com
+     vercel env add SMTP_PASS      # a 16-char Google App Password (requires 2-Step Verification)
+     vercel env add MAIL_FROM      # e.g. "NTP Bicol Dashboard <ruvpalado@gmail.com>"
+     ```
+     NOTE: Gmail frequently returns `535` for App Password SMTP from shared/datacenter IPs (like
+     Vercel's), so prefer Brevo for production.
+   - **Resend (needs a verified domain):**
+     ```bash
+     vercel env add RESEND_API_KEY
+     vercel env add MAIL_FROM
+     ```
+     Resend requires a domain verified in their dashboard, or the shared test sender
+     (`onboarding@resend.dev`) which only delivers to your own verified address.
 4. **Connect a Blob store** — this is required, not optional: it is where the uploaded provincial
    files, the consolidated results, and individual accounts are stored.
    - Open the project on vercel.com → **Storage** tab → **Create Database** → **Blob** → connect it.
