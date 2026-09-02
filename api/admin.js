@@ -234,6 +234,16 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
           ).join("")}
         </select>
       </div>
+      <div>
+        <label for="awQuarter">Quarter</label>
+        <select id="awQuarter">
+          <option value="ALL">All Quarters</option>
+          <option value="Q1">Quarter 1</option>
+          <option value="Q2">Quarter 2</option>
+          <option value="Q3">Quarter 3</option>
+          <option value="Q4">Quarter 4</option>
+        </select>
+      </div>
     </div>
     <div id="awardLevels">
       <div class="award-level-row"><span class="medal gold">Gold</span><select id="awGold"></select></div>
@@ -297,6 +307,7 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
   const awProvinceWrap = document.getElementById('awProvinceWrap');
   const awProvince = document.getElementById('awProvince');
   const awCategory = document.getElementById('awCategory');
+  const awQuarter = document.getElementById('awQuarter');
   const awGold = document.getElementById('awGold');
   const awSilver = document.getElementById('awSilver');
   const awBronze = document.getElementById('awBronze');
@@ -321,6 +332,7 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
   });
   awProvince.addEventListener('change', loadAwardPanel);
   awCategory.addEventListener('change', loadAwardPanel);
+  awQuarter.addEventListener('change', loadAwardPanel);
 
   function fillLevelSelect(selectEl, candidates, current) {
     let html = '<option value="">-- none --</option>';
@@ -370,9 +382,13 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     const scope = awScope.value;
     const province = scope === 'province' ? awProvince.value : '';
     const category = awCategory.value;
+    const quarter = awQuarter.value;
     try {
-      const candQuery = '/api/awards?candidates=1&category=' + encodeURIComponent(category)
+      let candQuery = '/api/awards?candidates=1&category=' + encodeURIComponent(category)
         + '&scope=' + encodeURIComponent(scope) + (province ? '&province=' + encodeURIComponent(province) : '');
+      if (quarter && quarter !== 'ALL') {
+        candQuery += '&period=quarterly&periodValue=' + encodeURIComponent(quarter);
+      }
       const [candRes, currentRes] = await Promise.all([
         fetch(candQuery).then((r) => r.json()),
         fetch('/api/awards').then((r) => r.json()),
