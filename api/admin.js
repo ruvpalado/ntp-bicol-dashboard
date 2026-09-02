@@ -68,7 +68,26 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
   header h1{margin:0;font-size:18px;}
   header a.view{color:#cfe0ee;font-size:12.5px;text-decoration:none;}
   header a.view:hover{text-decoration:underline;}
-  .wrap{max-width:780px;margin:32px auto;padding:0 20px;}
+  .wrap{max-width:1120px;margin:32px auto;padding:0 20px;display:flex;gap:26px;align-items:flex-start;}
+  /* Admin sidebar navigation */
+  .admin-sidebar{width:270px;flex-shrink:0;position:sticky;top:20px;background:#fff;
+    border:1px solid var(--border);border-radius:12px;padding:14px 10px;}
+  .admin-sidebar .side-brand{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;
+    letter-spacing:.06em;padding:2px 10px 10px;}
+  .admin-sidebar ul{list-style:none;margin:0;padding:0;}
+  .admin-sidebar li>a{display:flex;align-items:center;gap:8px;color:var(--navy);font-size:12.5px;
+    font-weight:600;text-decoration:none;padding:8px 10px;border-radius:8px;cursor:pointer;}
+  .admin-sidebar li>a:hover{background:var(--teal-light);}
+  .admin-sidebar li.active>a{background:var(--teal);color:#fff;}
+  .admin-sidebar .num{font-size:10px;font-weight:800;color:var(--muted);min-width:14px;
+    font-variant-numeric:tabular-nums;}
+  .admin-sidebar li.active .num{color:#cfe0ee;}
+  .admin-sidebar ul.sub{display:block;padding-left:14px;border-left:1px solid var(--border);margin:2px 0 2px 14px;}
+  .admin-sidebar .chev{cursor:pointer;margin-left:auto;font-size:10px;color:var(--muted);transition:transform .15s ease;}
+  .admin-sidebar li.open>.chev,.admin-sidebar li.open>a>.chev{transform:rotate(90deg);}
+  .admin-sidebar ul.sub.collapsed{display:none;}
+  .content-area{flex:1;min-width:0;}
+  @media (max-width:860px){ .wrap{flex-direction:column;} .admin-sidebar{width:100%;position:static;} }
   .card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:18px;}
   .card h2{margin:0 0 12px;font-size:14px;color:var(--navy);}
   .status-row{display:flex;justify-content:space-between;font-size:12.5px;padding:6px 0;border-bottom:1px dashed var(--border);}
@@ -136,6 +155,27 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
   </div>
 </header>
 <div class="wrap">
+  <nav class="admin-sidebar" aria-label="Admin sections">
+    <div class="side-brand">Admin Menu</div>
+    <ul>
+      <li data-target="sec-uploads"><a><span class="num">1</span> Province &amp; City Data Uploads</a></li>
+      <li data-target="sec-reference"><a><span class="num">2</span> Regional Reference Data</a></li>
+      <li class="parent" data-target="sec-awardee"><a><span class="num">3</span> Awardee Recognition <span class="chev">&#9656;</span></a>
+        <ul class="sub">
+          <li data-target="sec-module-activation"><a><span class="num">3.1</span> Module Activation (Per Area)</a></li>
+          <li data-target="sec-awardee-panel"><a><span class="num">3.2</span> Awardee</a></li>
+        </ul>
+      </li>
+      <li data-target="sec-history"><a><span class="num">4</span> Upload History</a></li>
+      <li class="parent" data-target="sec-team"><a><span class="num">5</span> Team Accounts <span class="chev">&#9656;</span></a>
+        <ul class="sub">
+          <li data-target="sec-pending"><a><span class="num">5.1</span> Pending</a></li>
+          <li data-target="sec-active"><a><span class="num">5.2</span> Active</a></li>
+        </ul>
+      </li>
+    </ul>
+  </nav>
+  <div class="content-area">
   <div id="warnBanner" class="banner warn ${storageWarning ? "show" : ""}">${storageWarning || ""}</div>
   <div id="statusBanner" class="banner"></div>
 
@@ -162,7 +202,7 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     </ul>
   </div>` : ""}
 
-  <div class="card">
+  <div class="card" id="sec-uploads">
     <h2>Province &amp; City Data Uploads</h2>
     <div class="standings-hint">
       Each province and Naga City has its own slot holding one file at a time. Uploading replaces only
@@ -173,7 +213,7 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     <div id="provinceSlots">${slots.map(slotSkeleton).join("")}</div>
   </div>
 
-  <div class="card">
+  <div class="card" id="sec-reference">
     <h2>Regional Reference Data</h2>
     <div class="standings-hint">
       Region-wide data uploaded once for the whole region, not per province. Uploading here makes the
@@ -184,12 +224,12 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     <div class="ref-grid" id="referenceSlots">${referenceSlots.map(referenceSlotSkeleton).join("")}</div>
   </div>
 
-  <div class="card">
+  <div class="card" id="sec-awardee">
     <h2>Awardee Recognition</h2>
     <div class="standings-hint">Gold/Silver/Bronze are identified automatically from current performance data on the public dashboard - no action is needed here for the normal case. Use this panel only to override a specific slot (e.g. a confirmed disqualification or data correction); pick "-- none --" to clear an override and return that slot to automatic identification.</div>
     <div id="awardsWarnBanner" class="banner warn"></div>
 
-    <div class="panel" style="border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+    <div class="panel" id="sec-module-activation" style="border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:16px;">
       <h3 style="margin:0 0 6px;font-size:13px;color:var(--navy);">Module Activation (Per Area)</h3>
       <div class="standings-hint" style="margin:0 0 10px;">
         Event-driven, per province/city: the public dashboard shows a &ldquo;Coming Soon&rdquo; placeholder for
@@ -212,6 +252,9 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
       </div>
     </div>
 
+    <div id="sec-awardee-panel">
+    <h3 style="margin:0 0 4px;font-size:13px;color:var(--navy);">Awardee</h3>
+    <div class="standings-hint" style="margin-bottom:14px;">Assign Gold/Silver/Bronze overrides below; leave a slot as "-- none --" for automatic identification.</div>
     <div class="field-row">
       <div>
         <label for="awScope">Ranking Level</label>
@@ -267,9 +310,10 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     </div>
     <button id="awardsSaveBtn" type="button" style="margin-top:14px;">Save Awardees</button>
     <div id="awardsStatusBanner" class="banner" style="margin-top:14px;"></div>
+    </div>
   </div>
 
-  <div class="card">
+  <div class="card" id="sec-history">
     <h2>Upload History</h2>
     <div class="standings-hint">Audit log of every province and reference upload/delete action, newest first &mdash; recorded automatically, nothing to configure here.</div>
     <div id="historyBox"><div class="slot-meta">Loading upload history...</div></div>
@@ -278,7 +322,7 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     </div>` : ""}
   </div>
 
-  <div class="card">
+  <div class="card" id="sec-team">
     <h2>Team Accounts</h2>
     <div class="standings-hint">
       Accounts request access via the login page's "Create an account" link. New requests appear
@@ -288,9 +332,10 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     </div>
     <div id="usersWarnBanner" class="banner warn"></div>
     <div id="usersStatusBanner" class="banner" style="margin-top:0;margin-bottom:14px;"></div>
-    <div id="pendingUsersBox"></div>
-    <div id="activeUsersBox" style="margin-top:14px;"></div>
+    <div id="sec-pending" class="sub-card"></div>
+    <div id="sec-active" class="sub-card" style="margin-top:14px;"></div>
   </div>
+</div>
 </div>
 <script>
   // "Uploaded by" is no longer a free-text field - it's recorded straight off the signed-in
@@ -301,6 +346,62 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     statusBanner.className = 'banner ' + cls + ' show';
     statusBanner.textContent = msg;
   }
+
+  // --- Admin sidebar navigation ----------------------------------------------------------------
+  (function () {
+    var sidebar = document.querySelector('.admin-sidebar');
+    if (!sidebar) return;
+    var items = Array.prototype.slice.call(sidebar.querySelectorAll('li[data-target]'));
+    // Parent groups (Awardee Recognition, Team Accounts) toggle their sub-list on chevron / row click.
+    sidebar.querySelectorAll('li.parent').forEach(function (li) {
+      li.addEventListener('click', function (e) {
+        if (e.target.closest('ul.sub a')) return;
+        var open = li.classList.toggle('open');
+        var sub = li.querySelector('ul.sub');
+        if (sub) sub.classList.toggle('collapsed', !open);
+      });
+    });
+    function scrollTo(el) {
+      if (!el) return;
+      var y = el.getBoundingClientRect().top + window.pageYOffset - 74;
+      window.scrollTo({ top: y, behavior: 'smooth' });
+    }
+    items.forEach(function (li) {
+      li.addEventListener('click', function (e) {
+        if (e.target.closest('ul.sub a')) {
+          var subLi = e.target.closest('li[data-target]');
+          scrollTo(document.getElementById(subLi.getAttribute('data-target')));
+          return;
+        }
+        scrollTo(document.getElementById(li.getAttribute('data-target')));
+      });
+      var a = li.querySelector('a');
+      if (a) a.style.cursor = 'pointer';
+    });
+    // Scrollspy: the active section is the last one whose top has scrolled past the header.
+    var targets = items.map(function (li) { return li.getAttribute('data-target'); })
+      .filter(function (id) { return !!document.getElementById(id); });
+    function setActive(id) {
+      items.forEach(function (li) {
+        var isThis = li.getAttribute('data-target') === id;
+        li.classList.toggle('active', isThis);
+        if (isThis) {
+          var parent = li.closest('li.parent');
+          if (parent) parent.classList.add('open');
+        }
+      });
+    }
+    function onScroll() {
+      var active = targets[0];
+      targets.forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el && el.getBoundingClientRect().top <= 90) active = id;
+      });
+      setActive(active);
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+  })();
 
   // --- Awardee Recognition panel ---------------------------------------------------------------
   const awScope = document.getElementById('awScope');
@@ -861,8 +962,8 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
   }
 
   // ---------------------------------------------------------------- Team Accounts panel
-  var pendingUsersBox = document.getElementById('pendingUsersBox');
-  var activeUsersBox = document.getElementById('activeUsersBox');
+  var pendingUsersBox = document.getElementById('sec-pending');
+  var activeUsersBox = document.getElementById('sec-active');
   var usersStatusBanner = document.getElementById('usersStatusBanner');
   var usersWarnBanner = document.getElementById('usersWarnBanner');
 
