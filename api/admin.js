@@ -1037,6 +1037,7 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
       var data = await res.json();
       if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
       var users = data.users || [];
+      var pending = users.filter(function (u) { return u.status === 'pending_approval' || u.status === 'pending_setup'; });
       var active = users.filter(function (u) { return u.status === 'active'; });
       var other = users.filter(function (u) { return u.status === 'rejected' || u.status === 'revoked'; });
 
@@ -1047,13 +1048,28 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
         return;
       }
 
-      activeUsersBox.innerHTML = '<div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px;">ACTIVE (' + active.length + ')</div>' +
+      activeUsersBox.innerHTML =
+        '<div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px;">PENDING (' + pending.length + ')</div>' +
+        (pending.length ? pending.map(function (u) {
+          var actions = u.status === 'pending_approval'
+            ? '<button type="button" class="btn-sm" data-approve="' + esc(u.email) + '">Approve</button>' +
+              '<button type="button" class="btn-sm btn-danger" data-reject="' + esc(u.email) + '">Reject</button>'
+            : '<span class="slot-meta">Nothing to do yet - waiting on them.</span>';
+          return userRowHtml(u, actions);
+        }).join('') : '<div class="slot-meta">No pending requests.</div>') +
+        '<div style="font-size:12px;font-weight:700;color:var(--muted);margin:14px 0 8px;">ACTIVE (' + active.length + ')</div>' +
         (active.length ? active.map(function (u) {
           return userRowHtml(u, '<button type="button" class="btn-sm btn-danger" data-revoke="' + esc(u.email) + '">Revoke</button>');
         }).join('') : '<div class="slot-meta">No active individual accounts yet.</div>') +
         (other.length ? '<div style="font-size:12px;font-weight:700;color:var(--muted);margin:14px 0 8px;">REJECTED / REVOKED (' + other.length + ')</div>' +
           other.map(function (u) { return userRowHtml(u, ''); }).join('') : '');
 
+      Array.prototype.forEach.call(document.querySelectorAll('[data-approve]'), function (btn) {
+        btn.addEventListener('click', function () { usersAction(btn.getAttribute('data-approve'), 'approve'); });
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('[data-reject]'), function (btn) {
+        btn.addEventListener('click', function () { usersAction(btn.getAttribute('data-reject'), 'reject', 'Reject this account request?'); });
+      });
       Array.prototype.forEach.call(document.querySelectorAll('[data-revoke]'), function (btn) {
         btn.addEventListener('click', function () { usersAction(btn.getAttribute('data-revoke'), 'revoke', 'Revoke this account? They will no longer be able to sign in.'); });
       });
