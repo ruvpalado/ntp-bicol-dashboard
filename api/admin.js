@@ -1053,8 +1053,9 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
         (pending.length ? pending.map(function (u) {
           var actions = u.status === 'pending_approval'
             ? '<button type="button" class="btn-sm" data-approve="' + esc(u.email) + '">Approve</button>' +
-              '<button type="button" class="btn-sm btn-danger" data-reject="' + esc(u.email) + '">Reject</button>'
-            : '<span class="slot-meta">Nothing to do yet - waiting on them.</span>';
+              '<button type="button" class="btn-sm btn-danger" data-reject="' + esc(u.email) + '">Reject</button>' +
+              '<button type="button" class="btn-sm btn-danger" data-delete-pending="' + esc(u.email) + '">Delete</button>'
+            : '<button type="button" class="btn-sm btn-danger" data-delete-pending="' + esc(u.email) + '">Delete</button>';
           return userRowHtml(u, actions);
         }).join('') : '<div class="slot-meta">No pending requests.</div>') +
         '<div style="font-size:12px;font-weight:700;color:var(--muted);margin:14px 0 8px;">ACTIVE (' + active.length + ')</div>' +
@@ -1069,6 +1070,11 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
       });
       Array.prototype.forEach.call(document.querySelectorAll('[data-reject]'), function (btn) {
         btn.addEventListener('click', function () { usersAction(btn.getAttribute('data-reject'), 'reject', 'Reject this account request?'); });
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('[data-delete-pending]'), function (btn) {
+        btn.addEventListener('click', function () {
+          usersAction(btn.getAttribute('data-delete-pending'), 'delete', 'Delete this pending account request? This permanently removes their data and lets them re-submit.');
+        });
       });
       Array.prototype.forEach.call(document.querySelectorAll('[data-revoke]'), function (btn) {
         btn.addEventListener('click', function () { usersAction(btn.getAttribute('data-revoke'), 'revoke', 'Revoke this account? They will no longer be able to sign in.'); });

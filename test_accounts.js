@@ -264,6 +264,22 @@ function extractToken(mailHtml) {
     check("rejected account cannot log in", /error=1/.test(res._headers.Location || ""));
   }
 
+  // ================================================================ 6b. Delete pending
+  const EMAIL3 = "delete-me@example.gov.ph";
+  await userStore.createSignupRequest({ name: "A", surname: "B", contactNumber: "123", email: EMAIL3 });
+  {
+    const res = mockRes();
+    await users(mockReq({ method: "POST", body: { email: EMAIL3, action: "delete" }, cookie: sessionCookieFor("master") }), res);
+    check("delete action succeeds on a pending request", res._status === 200 && res._json.ok === true);
+  }
+  check("deleted pending request is physically removed", (await userStore.findByEmail(EMAIL3)) === null);
+  {
+    const res = mockRes();
+    // Deleting a non-existent / non-pending account is rejected, not silently ignored.
+    await users(mockReq({ method: "POST", body: { email: EMAIL, action: "delete" }, cookie: sessionCookieFor("master") }), res);
+    check("delete rejects an active (non-pending) account", res._status === 400);
+  }
+
   // ================================================================ 7. Expired token
   // EMAIL was revoked in section 5, so createResetToken (active-only) won't issue one for it -
   // reactivate a scratch copy just for this check, backdating the token's expiry to exercise the

@@ -25,8 +25,8 @@ module.exports = async (req, res) => {
     const body = req.body || {};
     const action = body.action;
     const targetEmail = body.email;
-    if (!targetEmail || !["approve", "reject", "revoke"].includes(action)) {
-      res.status(400).json({ error: "Provide email and a valid action (approve/reject/revoke)." });
+    if (!targetEmail || !["approve", "reject", "revoke", "delete"].includes(action)) {
+      res.status(400).json({ error: "Provide email and a valid action (approve/reject/revoke/delete)." });
       return;
     }
     try {
@@ -50,6 +50,8 @@ module.exports = async (req, res) => {
         }
       } else if (action === "reject") {
         result = await userStore.rejectUser(targetEmail);
+      } else if (action === "delete") {
+        result = await userStore.deleteUser(targetEmail);
       } else {
         result = await userStore.revokeUser(targetEmail);
       }
