@@ -414,6 +414,9 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
 
   function currentUnitLabel() {
     if (awScope.value === 'region') return 'province';
+    // Naga City is a Highly Urbanized City - its Case Notification board ranks reporting facilities,
+    // not municipalities (mirror of lib/awardRanking.js's unit handling).
+    if (awProvince.value === 'NAGA CITY' && awCategory.value === 'cnr') return 'facility';
     const opt = awCategory.options[awCategory.selectedIndex];
     return (opt && opt.getAttribute('data-unit')) || 'facility';
   }
@@ -675,12 +678,8 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
       ? '<span class="pill ok">Uploaded</span>'
       : '<span class="pill none">No file uploaded</span>';
     var meta = slot.uploaded
-      ? ('<div class="slot-meta">' + esc(slot.filename || '') +
-         ' &middot; ' + (slot.totalRows || 0).toLocaleString() + ' rows<br>' +
-         'by ' + esc(slot.uploadedBy || 'unknown') + ' on ' + esc(fmtWhen(slot.uploadedAt)) +
-         (rowCountSummary(slot.rowCounts) ? '<br>' + rowCountSummary(slot.rowCounts) : '') +
-         ((slot.warnings && slot.warnings.length)
-            ? '<br><span style="color:#8a6300;">' + esc(slot.warnings.join(' ')) + '</span>' : '') +
+      ? ('<div class="slot-meta">' + esc(slot.filename || '') + '<br>' +
+         'Uploaded by ' + esc(slot.uploadedBy || 'unknown') + ' on ' + esc(fmtWhen(slot.uploadedAt)) +
          '</div>')
       // NB: no apostrophes or backslash escapes anywhere in this client script - it is emitted from
       // inside a server-side template literal, which consumes backslashes, so an escaped quote here
