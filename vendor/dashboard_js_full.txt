@@ -836,6 +836,11 @@ function renderFilterBar(){
     // all (region-wide rollup), so refreshFacilityOptions() never runs to reset this; clear it here
     // so a stale single-facility banner from a previously-viewed province/page doesn't linger.
     if(!hasProvince) EFFECTIVE_SINGLE_FACILITY = null;
+    const qOnlyR = (state.module==="screening" || state.module==="pict");
+    if(qOnlyR && state.period !== "quarterly"){
+      state.period = "quarterly";
+      state.periodValue = "ALL";
+    }
     fb.innerHTML = `<label>Province</label>
       <select id="fProvince"><option value="ALL" ${!hasProvince?'selected':''}>All Provinces (Region rollup)</option>
         ${ALLP.map(pr=>`<option value="${pr}" ${pr===p?'selected':''}>${LABEL[pr]}</option>`).join("")}</select>`
@@ -848,8 +853,8 @@ function renderFilterBar(){
       + `
       <label>Period</label>
       <select id="fPeriod" class="period-select">
-        <option value="monthly" ${state.period==='monthly'?'selected':''}>Monthly</option>
-        <option value="quarterly" ${state.period==='quarterly'?'selected':''}>Quarterly</option>
+        ${qOnlyR ? `<option value="quarterly" selected>Quarterly</option>` : `<option value="monthly" ${state.period==='monthly'?'selected':''}>Monthly</option>
+        <option value="quarterly" ${state.period==='quarterly'?'selected':''}>Quarterly</option>`}
       </select>
       <label>${state.period==='monthly'?'Month':'Quarter'}</label>
       <select id="fPeriodValue" class="period-value-select">
@@ -950,6 +955,11 @@ function renderFilterBar(){
     const munis = isOps ? Object.keys(GEO[p]||{}).sort() : [];
     const hasMN = isOps && GEO_MN[p] && Object.keys(GEO_MN[p]).length>0;
     const facilitySelectDisabled = !(munis.length) || state.module==="lab";
+    const qOnly = (state.module==="screening" || state.module==="pict");
+    if(qOnly && state.period !== "quarterly"){
+      state.period = "quarterly";
+      state.periodValue = "ALL";
+    }
     fb.innerHTML = `
       <label>Municipality</label>
       <select id="fMuni" ${(munis.length && state.module!=="mn" && !rtdlMode && !labMode)? "":"disabled"}><option value="ALL" ${state.muni==="ALL"?'selected':''}>All Municipalities</option>
@@ -959,8 +969,8 @@ function renderFilterBar(){
       <select id="fFacility" disabled><option value="ALL">All Facilities</option></select>
       <label>Period</label>
       <select id="fPeriod" class="period-select">
-        <option value="monthly" ${state.period==='monthly'?'selected':''}>Monthly</option>
-        <option value="quarterly" ${state.period==='quarterly'?'selected':''}>Quarterly</option>
+        ${qOnly ? `<option value="quarterly" selected>Quarterly</option>` : `<option value="monthly" ${state.period==='monthly'?'selected':''}>Monthly</option>
+        <option value="quarterly" ${state.period==='quarterly'?'selected':''}>Quarterly</option>`}
       </select>
       <label>${state.period==='monthly'?'Month':'Quarter'}</label>
       <select id="fPeriodValue" class="period-value-select">
