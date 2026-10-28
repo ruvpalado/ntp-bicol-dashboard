@@ -2598,9 +2598,16 @@ function renderNtpNetwork(el){
     html += `</tbody></table></div>`;
   }
   if(net.tbts && Array.isArray(net.tbts) && net.tbts.length){
-    html += `<div class="panel" style="margin-top:14px;"><h3>TB Technical Specialists</h3><table><thead><tr><th>TB Technical Specialist</th><th>Letter Addressed to</th><th>Attention to</th></tr></thead><tbody>`;
-    for(const r of net.tbts){ html += `<tr><td>${r["TB Technical Specialist"]||r.name||''}</td><td>${r["Letter Addressed to"]||r.letter||''}</td><td>${r["Attention to"]||r.attention||''}</td></tr>`; }
-    html += `</tbody></table></div>`;
+    const hasNewTbts = net.tbts.some(r => r["Contact Number"] || r["Email Address"] || r.contact || r.email || r["CP Number"]);
+    if(hasNewTbts){
+      html += `<div class="panel" style="margin-top:14px;"><h3>TB Technical Specialists</h3><table><thead><tr><th>TB Technical Specialist</th><th>Contact Number</th><th>Email Address</th></tr></thead><tbody>`;
+      for(const r of net.tbts){ html += `<tr><td>${r["TB Technical Specialist"]||r.name||r.Name||''}</td><td>${r["Contact Number"]||r.contact||r["CP Number"]||r.cp||''}</td><td>${r["Email Address"]||r.email||''}</td></tr>`; }
+      html += `</tbody></table></div>`;
+    }else{
+      html += `<div class="panel" style="margin-top:14px;"><h3>TB Technical Specialists</h3><table><thead><tr><th>TB Technical Specialist</th><th>Letter Addressed to</th><th>Attention to</th></tr></thead><tbody>`;
+      for(const r of net.tbts){ html += `<tr><td>${r["TB Technical Specialist"]||r.name||''}</td><td>${r["Letter Addressed to"]||r.letter||''}</td><td>${r["Attention to"]||r.attention||''}</td></tr>`; }
+      html += `</tbody></table></div>`;
+    }
   }
   if(net.itis_pa && Array.isArray(net.itis_pa) && net.itis_pa.length){
     html += `<div class="panel" style="margin-top:14px;"><h3>ITIS PA</h3><table><thead><tr><th>Name</th><th>Area of assignment</th><th>CP number</th><th>Email Address</th></tr></thead><tbody>`;
