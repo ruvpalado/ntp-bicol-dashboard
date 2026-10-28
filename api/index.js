@@ -130,13 +130,26 @@ module.exports = async (req, res) => {
           if (!sheet || !sheet.grid) return [];
           const hr = typeof sheet.headerRows === "number" ? sheet.headerRows : 1;
           const grid = sheet.grid.slice(hr);
-          const headers = (sheet.grid.slice(0, hr)[0] || []).map((h)=>String(h||'').trim());
+          const headerRows = sheet.grid.slice(0, hr);
+          const headers = [];
+          for (let i=0; i < (headerRows[0]||[]).length; i++) {
+            let h = '';
+            for (let r=0; r<headerRows.length; r++) {
+              const val = headerRows[r] && headerRows[r][i];
+              if (val !== undefined && val !== null && String(val).trim()) {
+                h = String(val).trim();
+                break;
+              }
+            }
+            headers.push(h);
+          }
           const rows = [];
           for (const r of grid) {
             if (!r) continue;
             const obj = {};
             let has = false;
             for (let i=0;i<headers.length;i++) {
+              if (!headers[i]) continue;
               const v = r[i] === undefined || r[i] === null ? '' : String(r[i]).trim();
               if (v) has = true;
               obj[headers[i]] = v;
