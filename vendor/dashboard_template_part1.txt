@@ -243,6 +243,10 @@ canvas{max-height:280px;}
   <!-- rel="noopener noreferrer": without it the opened tab can reach back through window.opener,
        and the referrer would leak this dashboard's URL. -->
   <nav class="header-links" aria-label="DOH systems">
+    <a href="https://drive.google.com/drive/folders/1EbMBN_D-JT6q84w2XK1iEWfn9DMwIvfd?fbclid=IwY2xjawUhZxJleHRuA2FlbQIxMABwZG9mBXNydGMGYXBwX2lkEDIyMjAzOTE3ODgyMDA4OTIAAR6Iy3LrovQbqATW3uyDvPe1QaZTBCMwIQfqtGPRoiKAv7sISpw7iShZjFNI1g_aem_Tn0MPQ3EkI6LfBXIV9ALCQ" target="_blank" rel="noopener noreferrer">NTP Memo</a>
+    <span class="sep" aria-hidden="true">|</span>
+    <a href="https://itis.doh.gov.ph/index.php/Downloads/view_download_v2" target="_blank" rel="noopener noreferrer">ITIS Policy</a>
+    <span class="sep" aria-hidden="true">|</span>
     <a href="https://itis.doh.gov.ph/" target="_blank" rel="noopener noreferrer">ITIS</a>
     <span class="sep" aria-hidden="true">|</span>
     <a href="https://itis.doh.gov.ph/mandatorynotification/" target="_blank" rel="noopener noreferrer">Mandatory Notification</a>
