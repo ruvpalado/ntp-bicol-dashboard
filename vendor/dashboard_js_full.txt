@@ -89,6 +89,7 @@ const MODULES = [
   {key:"screening", label:"Screening & Presumptive"},
   {key:"lab", label:"Laboratory"}, {key:"target", label:"Target vs Accomplishment"},
   {key:"pict", label:"PICT Examination"},
+  {key:"ntpnetwork", label:"NTP Network"},
   {key:"awards", label:"Awardee Recognition"},
 ];
 const LAB_SUBS = [
@@ -131,21 +132,35 @@ const AWARD_CATEGORIES = [
   {key:"drtb_tsr", label:"DRTB Treatment Success", metric:n=>(n&&n.tsr)?n.tsr.drtb.rate:null, metricLabel:"DRTB Treatment Success Rate", provinceUnit:"facility", fmtVal:v=>pctS(v), tiebreak:n=>tsrTiebreak(n,"drtb")},
   {key:"tpt", label:"TB Preventive Treatment", metric:n=>(n&&n.tpt)?n.tpt.coverage_pct:null, metricLabel:"TPT Coverage Rate", provinceUnit:"facility", fmtVal:v=>pctS(v)},
 ];
+// Naga City is a Highly Urbanized City - reported as its own area but with no municipalities beneath
+// it - so its Case Notification board ranks the city's own reporting FACILITIES, the same unit as
+// its TSR/TPT boards (mirror of lib/awardRanking.js's HUC handling). aUnit is the unit kind actually
+// ranked for a category on a given province's board.
+const HUC_AREAS = new Set(["NAGA CITY"]);
+function awardUnitKind(catDef, province){
+  return (catDef.provinceUnit==="municipality" && HUC_AREAS.has(province)) ? "facility" : catDef.provinceUnit;
+}
 // Rank the category's own unit (facilities for DSTB/DRTB TSR + TPT, municipalities for Case
 // Notification) by the metric, highest first - mirror of lib/awardRanking.js's unitCandidates().
 // This is the PROVINCIAL view: restricted to the given province's own units (key prefix
 // "F|province|" / "M|province|"), so a province is required - mirror of lib/awardRanking.js.
 function awardUnitCandidates(catDef, province){
-  const pk = catDef.provinceUnit==="municipality" ? "M" : "F";
-  const nameIdx = catDef.provinceUnit==="municipality" ? 2 : 3;
+  const facilityRanked = awardUnitKind(catDef, province)==="facility";
+  const pk = facilityRanked ? "F" : "M";
+  const nameIdx = facilityRanked ? 3 : 2;
   const prefix = pk+"|"+province+"|";
   const out = [];
   for(const key in NODES){
     if(!key.startsWith(prefix)) continue;
+    const parts = key.split("|");
+    // Facility-ranked awards (DSTB/DRTB TSR, TPT, plus Case Notification inside a Highly Urbanized
+    // City like Naga City) rank only the public-sector case-notifying (iDOTS/DOTS) facilities -
+    // mirror of lib/awardRanking.js's unitCandidates(). TML/RTDL/MTBN/Referring facilities are not
+    // eligible.
+    if(facilityRanked && !IDOTS_DOTS_FACILITIES.has(parts.slice(3).join("|").toUpperCase())) continue;
     const n = periodNode(NODES[key]);
     const v = catDef.metric(n);
     if(v==null) continue;
-    const parts = key.split("|");
     const rawName = parts[nameIdx]||"";
     const provKey = parts[1];
     const name = titleCase(rawName) + " (" + (LABEL[provKey]||titleCase(provKey)) + ")";
@@ -253,7 +268,7 @@ const LAB_FACILITY_LAB_SUBS = new Set(["dssm","parago"]);
 // dropdown should list only that sub-module's own Laboratory Facility roster (DSSM_FACILITIES or
 // PARAGO_FACILITIES via currentLabFacilitySet(), broader TML+RTDL lists) and the Municipality
 // dropdown should be disabled, matching the UX established for the 4 RTDL-restricted sub-modules above.
-function isLabFacilityRestricted(){ return state.module==="lab" && LAB_FACILITY_LAB_SUBS.has(state.labSub); }
+function isLabFacilityRestricted(){ return state.module==="lab" && state.labSub !== "summary"; }
 const QUARTER_LABELS = {Q1:"1st Quarter", Q2:"2nd Quarter", Q3:"3rd Quarter", Q4:"4th Quarter"};
 let charts = {};
 
@@ -829,7 +844,7 @@ function renderFilterBar(){
       <select id="fMuni" ${(munis.length && state.module!=="mn" && !rtdlMode && !labMode)? "":"disabled"}><option value="ALL">All Municipalities</option>
         ${munis.map(m=>`<option value="${m}" ${m===state.muni?'selected':''}>${titleCase(m)}</option>`).join("")}</select>
       <label>${facilityUsesMN() ? "MN Facility" : (rtdlMode ? "Facility (RTDL sites)" : (labMode ? "Facility (Laboratory sites)" : "Facility"))}</label>
-      <select id="fFacility" ${munis.length? "":"disabled"}><option value="ALL">All Facilities</option></select>` : "")
+      <select id="fFacility" ${(munis.length && !(state.module==="lab"))? "":"disabled"}><option value="ALL">All Facilities</option></select>` : "")
       + `
       <label>Period</label>
       <select id="fPeriod" class="period-select">
@@ -856,15 +871,12 @@ function renderFilterBar(){
           // above, since RTDL coverage is per-facility, not per-town).
           regularFacs = Object.values(GEO[p]||{}).flat().filter(f=>RTDL_FACILITIES.has(f)).sort();
         }
-        else if(labMode){
-          // DSSM Examination / Parago Case Examination are each restricted to their OWN source
-          // sheet's Laboratory Facility roster (Sputum Examination / Parago Case Examination
-          // respectively - the two sheets' facility lists differ), region-wide within this
-          // province (Municipality is locked above, matching the RTDL sub-modules' UX since lab
-          // coverage is per-facility, not per-town).
-          const labFacSet = currentLabFacilitySet();
-          regularFacs = Object.values(GEO[p]||{}).flat().filter(f=>labFacSet.has(f)).sort();
-        }
+      else if(labMode){
+        // All Laboratory sub-modules: show only laboratory facilities (union of RTDL + DSSM + Parago)
+        // region-wide within this province; Municipality locked.
+        const labFacSet = new Set([...RTDL_FACILITIES, ...DSSM_FACILITIES, ...PARAGO_FACILITIES]);
+        regularFacs = Object.values(GEO[p]||{}).flat().filter(f=>labFacSet.has(f)).sort();
+      }
         else if(state.module==="cnr"){
           // CNR module: regular (GEO) facilities only - individual MN facilities are NOT listed here.
           // If this municipality/province has any private-sector (GEO_MN) data, a single "MN
@@ -937,13 +949,14 @@ function renderFilterBar(){
     const labMode = isLabFacilityRestricted();
     const munis = isOps ? Object.keys(GEO[p]||{}).sort() : [];
     const hasMN = isOps && GEO_MN[p] && Object.keys(GEO_MN[p]).length>0;
+    const facilitySelectDisabled = !(munis.length) || state.module==="lab";
     fb.innerHTML = `
       <label>Municipality</label>
       <select id="fMuni" ${(munis.length && state.module!=="mn" && !rtdlMode && !labMode)? "":"disabled"}><option value="ALL" ${state.muni==="ALL"?'selected':''}>All Municipalities</option>
         ${munis.map(m=>`<option value="${m}" ${m===state.muni?'selected':''}>${titleCase(m)}</option>`).join("")}
         ${(hasMN && state.module!=="cnr" && !rtdlMode && !labMode)? `<option value="__MN__" ${state.muni==="__MN__"?'selected':''}>MN Facility</option>` : ""}</select>
       <label>${facilityUsesMN() ? "MN Facility" : (rtdlMode ? "Facility (RTDL sites)" : (labMode ? "Facility (Laboratory sites)" : "Facility"))}</label>
-      <select id="fFacility" ${munis.length? "":"disabled"}><option value="ALL">All Facilities</option></select>
+      <select id="fFacility" disabled><option value="ALL">All Facilities</option></select>
       <label>Period</label>
       <select id="fPeriod" class="period-select">
         <option value="monthly" ${state.period==='monthly'?'selected':''}>Monthly</option>
@@ -965,12 +978,9 @@ function renderFilterBar(){
         regularFacs = Object.values(GEO[p]||{}).flat().filter(f=>RTDL_FACILITIES.has(f)).sort();
       }
       else if(labMode){
-        // DSSM Examination / Parago Case Examination are each restricted to their OWN source
-        // sheet's Laboratory Facility roster (Sputum Examination / Parago Case Examination
-        // respectively - the two sheets' facility lists differ), region-wide within this province
-        // (Municipality is locked above, matching the RTDL sub-modules' UX since lab coverage is
-        // per-facility, not per-town).
-        const labFacSet = currentLabFacilitySet();
+        // All Laboratory sub-modules: show only laboratory facilities (union of RTDL + DSSM + Parago)
+        // region-wide within this province; Municipality locked.
+        const labFacSet = new Set([...RTDL_FACILITIES, ...DSSM_FACILITIES, ...PARAGO_FACILITIES]);
         regularFacs = Object.values(GEO[p]||{}).flat().filter(f=>labFacSet.has(f)).sort();
       }
       else if(state.module==="cnr"){
@@ -1660,10 +1670,8 @@ function renderKPIRow(node){
   if(state.module==="lab"){
     const lab = d.lab;
     if(state.labSub==="summary"){
-      el.style.gridTemplateColumns = "repeat(7,1fr)";
+      el.style.gridTemplateColumns = "repeat(6,1fr)";
       el.innerHTML = `
-        <div class="kpi-card"><div class="accent" style="background:#2e8b57"></div><div class="kpi-label">Screening &amp; Presumptive</div>
-          <div class="kpi-value">${d.screening.has_data? fmt(d.screening.presumptive) : "n/a"}</div><div class="kpi-sub">presumptive identified</div></div>
         <div class="kpi-card"><div class="accent" style="background:#0f7d8c"></div><div class="kpi-label">GenXpert Examination</div>
           <div class="kpi-value">${lab.genxpert_exam.has_data? fmt(lab.genxpert_exam.presumptive_examined) : "n/a"}</div><div class="kpi-sub">presumptive examined</div></div>
         <div class="kpi-card"><div class="accent" style="background:#c0392b"></div><div class="kpi-label">DSSM Examination</div>
@@ -1741,7 +1749,7 @@ function renderKPIRow(node){
         <div class="kpi-card"><div class="accent" style="background:#e2a336"></div><div class="kpi-label">Positive &ndash; Ziehl-Neelsen</div><div class="kpi-value">${fmt(p.zn_positive)}</div><div class="kpi-sub">ZN method</div></div>
         <div class="kpi-card"><div class="accent" style="background:#8fd3c7"></div><div class="kpi-label">Examined &ndash; NaOH</div><div class="kpi-value">${fmt(p.naoh_examined)}</div><div class="kpi-sub">Sodium Hydroxide method</div></div>
         <div class="kpi-card"><div class="accent" style="background:#f2c572"></div><div class="kpi-label">Positive &ndash; NaOH</div><div class="kpi-value">${fmt(p.naoh_positive)}</div><div class="kpi-sub">Sodium Hydroxide method</div></div>
-        <div class="kpi-card"><div class="accent" style="background:#2e8b57"></div><div class="kpi-label">Positivity Rate</div><div class="kpi-value">${pctS(p.positivity_rate)}</div><div class="kpi-sub">positive / examined (ZN+NaOH)</div></div>
+        <div class="kpi-card"><div class="accent" style="background:#2e8b57"></div><div class="kpi-label">Positivity Rate</div><div class="kpi-value">${pctS(p.positivity_rate)}</div><div class="kpi-sub">positive / examined &times; 100 (ZN+NaOH)</div></div>
         <div class="kpi-card"><div class="accent" style="background:#0b2a4a"></div><div class="kpi-label">Parago</div><div class="kpi-value">${fmt(p.parago)}</div><div class="kpi-sub">diagnosed Parago</div></div>
         <div class="kpi-card"><div class="accent" style="background:#9b59b6"></div><div class="kpi-label">Co-Infection</div><div class="kpi-value">${fmt(p.coi)}</div><div class="kpi-sub">diagnosed co-infection</div></div>
         <div class="kpi-card"><div class="accent" style="background:#c0392b"></div><div class="kpi-label">Tuberculosis</div><div class="kpi-value">${fmt(p.tb)}</div><div class="kpi-sub">diagnosed TB</div></div>
@@ -1947,7 +1955,7 @@ function renderAwardCard(cat, scope, province){
     }
     return `<div class="${rowCls}">${badgeHtml}<span class="award-name muted">No qualifying data yet</span><span class="award-val"></span></div>`;
   }).join("");
-  const unitNote = scope==="region" ? "ranked by province" : (cat.provinceUnit==="municipality" ? "ranked by municipality" : "ranked by facility");
+  const unitNote = scope==="region" ? "ranked by province" : "ranked by " + awardUnitKind(cat, province);
   const periodNote = (!state.periodValue || state.periodValue==="ALL") ? "" : " &middot; " + periodLabel();
   return `<div class="panel award-card">
     <h3>${cat.label}</h3>
@@ -1962,7 +1970,7 @@ function exportAwardsExcel(){
   const period = currentAwardPeriod();
   const rows = [["Period","Scope","Category","Ranked By","Level","Awardee","Value","Status"]];
   AWARD_CATEGORIES.forEach(cat=>{
-    const unit = scope==="region" ? "Province" : (cat.provinceUnit==="municipality" ? "Municipality" : "Facility");
+    const unit = scope==="region" ? "Province" : (awardUnitKind(cat, province)==="municipality" ? "Municipality" : "Facility");
     const scopeName = scope==="region" ? "Bicol Region" : (LABEL[province]||province);
     ["gold","silver","bronze"].forEach(lvl=>{
       const a = officialAward(scope, province, cat.key, lvl);
@@ -1992,7 +2000,7 @@ function renderAwards(el){
   const periodContext = (!state.periodValue || state.periodValue==="ALL") ? "" : " for " + periodLabel();
   const scopeNote = scope==="region"
     ? "Regional board ranks the 6 provinces plus Naga City against each other."
-    : `Provincial board ranks ${LABEL[province]||province}&rsquo;s own municipalities (Case Notification) or facilities (DSTB/DRTB Treatment Success, TB Preventive Treatment) against each other.`;
+    : `Provincial board ranks ${LABEL[province]||province}&rsquo;s own ${AWARD_CATEGORIES.map(cat=>awardUnitKind(cat, province)).filter((k,i,a)=>a.indexOf(k)===i).map(k=>k==="municipality"?"municipalities":"facilities").join(" and ")} against each other (${AWARD_CATEGORIES.map(cat=>cat.label+" by "+awardUnitKind(cat, province)).join("; ")}).`;
   const cards = AWARD_CATEGORIES.map(cat => renderAwardCard(cat, scope, province)).join("");
   el.innerHTML = `<div class="section-title"><h2>Awardee Recognition${period? " &middot; "+period+" Awardees" : ""}</h2></div>
     <div class="desc">${scopeNote}${periodContext} &mdash; Gold/Silver/Bronze are automatically identified from performance data each time this page loads &mdash; no manual assignment required. The Admin may still override a specific slot via the live dashboard&rsquo;s Awardee Recognition admin panel for confirmed exceptions (e.g. a disqualification or data correction).</div>
@@ -2016,6 +2024,7 @@ function renderModule(){
   const {node:d} = currentNode();
   const el = document.getElementById("moduleContent");
   if(state.module==="awards"){ renderAwards(el); return; }
+  if(state.module==="ntpnetwork"){ renderNtpNetwork(el); return; }
   if(!d){ el.innerHTML = noData("No data for this selection."); return; }
   if(state.module==="cnr") renderCNR(d, el);
   else if(state.module==="tsr") renderTSR(d, el);
@@ -2457,13 +2466,10 @@ function renderLab(d, el){
   document.getElementById("labSubtabs").querySelectorAll("button").forEach(b=> b.addEventListener("click", ()=>{
     state.labSub = b.dataset.m;
     document.getElementById("labSubtabs").querySelectorAll("button").forEach(x=>x.classList.remove("active")); b.classList.add("active");
-    // Every Lab sub-module rebuilds the Facility dropdown from a different source/filter (RTDL-only
-    // for GenXpert/Stool, Screening-specific exclusions for Screening & Presumptive, the regular
-    // GEO list otherwise) - always reset Municipality/Facility and re-render the filter bar so a
-    // selection from the previous sub-module (which may no longer be a valid option here) never
-    // lingers stale.
     state.muni = "ALL"; state.facility = "ALL";
     renderFilterBar();
+    const facSel2 = document.getElementById("fFacility");
+    if(facSel2) facSel2.disabled = !(state.module==="lab" && state.labSub!=="summary");
     renderKPIRow(currentNode().node);
     renderLabSub(currentNode().node);
     renderMap(); // per instruction: Lab sub-tab changes which indicator the map tooltip shows too
@@ -2503,7 +2509,22 @@ function renderLabSub(d){
   } else if(state.labSub==="parago"){
     const p = lab.parago;
     if(!p.has_data){ el.innerHTML = noData("No Parago (paragonimiasis) case examination data for this scope."); return; }
-    el.innerHTML = `<div class="panel"><h3>Examined &amp; Positive by Method</h3><canvas id="c1"></canvas></div>
+    el.innerHTML = `<div class="panel"><h3>Parago Computation</h3>
+      <div class="desc">How each figure on this tab is computed from the province upload.</div>
+      <table>
+        <thead><tr><th>Metric</th><th>Formula</th></tr></thead>
+        <tbody>
+          <tr><td>Total Examined</td><td>Examined (Ziehl-Neelsen) + Examined (Sodium Hydroxide/NaOH) (= ${fmt(p.examined)})</td></tr>
+          <tr><td>Total Positive</td><td>Positive (Ziehl-Neelsen) + Positive (Sodium Hydroxide/NaOH) (= ${fmt(p.positive)})</td></tr>
+          <tr><td>Positivity Rate</td><td>(Total Positive &divide; Total Examined) &times; 100, rounded to 1 decimal (= ${pctS(p.positivity_rate)})</td></tr>
+          <tr><td>Parago (P)</td><td>&Sigma; "No. of cases examined by type of Lab Dx" where diagnosis = P (Paragonimiasis) (= ${fmt(p.parago)})</td></tr>
+          <tr><td>Tuberculosis (T)</td><td>&Sigma; "No. of cases examined by type of Lab Dx" where diagnosis = T (= ${fmt(p.tb)})</td></tr>
+          <tr><td>Co-Infection (Co-I)</td><td>&Sigma; "No. of cases examined by type of Lab Dx" where diagnosis = Co-I (= ${fmt(p.coi)})</td></tr>
+        </tbody>
+      </table>
+      <div class="desc" style="margin-top:10px;margin-bottom:0;">All figures are summed from the PARAGO CASE EXAMINATION sheet of the province upload (per-facility rows, long-format "Laboratory Activity &times; Method/Diagnosis" columns). The Diagnosis Breakdown chart shows the share of Parago / TB / Co-Infection within the 4-way Lab Dx breakdown (P / T / Co-I / Neg).</div>
+    </div>
+    <div class="panel" style="margin-top:14px;"><h3>Examined &amp; Positive by Method</h3><canvas id="c1"></canvas></div>
       <div class="panel" style="margin-top:14px;"><h3>Diagnosis Breakdown</h3><canvas id="c2"></canvas></div>`;
     mkChart("c1", {type:"bar", data:{labels:["Ziehl-Neelsen","Sodium Hydroxide (NaOH)"],
       datasets:[
@@ -2561,6 +2582,45 @@ function renderPict(d, el){
       <tr><td rowspan="2">(4) Among HIV-Positive, Given</td><td>ART</td><td>${val(p.art_given)}</td></tr>
       <tr><td>CPT</td><td>${val(p.cpt_given)}</td></tr>
     </tbody></table></div>`;
+}
+
+function renderNtpNetwork(el){
+  const net = (typeof KPI !== "undefined" && KPI.meta) ? KPI.meta.ntp_network : null;
+  if(!net || (!net.tbts && !net.itis_pa && !net.pho && (!net.provinces || Object.keys(net.provinces).length===0))){
+    el.innerHTML = `<div class="section-title"><h2>NTP Network</h2></div><div class="panel">${noData("No NTP Network data uploaded. Upload the NTP Network file in Admin → Regional Reference Data.")}</div>`;
+    return;
+  }
+  let html = `<div class="section-title"><h2>NTP Network</h2></div><div class="desc">NTP Directory / Network contacts from uploaded reference file.</div>`;
+  if(net.pho){
+    html += `<div class="panel" style="margin-top:14px;"><h3>Provincial Health Office (PHO)</h3><table><thead><tr><th>Province</th><th>PHO</th><th>Nurse Coordinator</th><th>Contact Number</th><th>Email Address</th><th>MedTech Coordinator</th><th>Contact Number</th><th>Email Address</th></tr></thead><tbody>`;
+    if(Array.isArray(net.pho)){
+      for(const r of net.pho){ html += `<tr><td>${r.Province||r.province||''}</td><td>${r.PHO||r.pho||''}</td><td>${r["Nurse Coordinator"]||r.nurse||''}</td><td>${r["Contact Number"]||r.contact||''}</td><td>${r["Email Address"]||r.email||''}</td><td>${r["MedTech Coordinator"]||r.medtech||''}</td><td>${r["Contact Number_2"]||r.contact2||''}</td><td>${r["Email Address_2"]||r.email2||''}</td></tr>`; }
+    }
+    html += `</tbody></table></div>`;
+  }
+  if(net.tbts && Array.isArray(net.tbts) && net.tbts.length){
+    html += `<div class="panel" style="margin-top:14px;"><h3>TB Technical Specialists</h3><table><thead><tr><th>TB Technical Specialist</th><th>Letter Addressed to</th><th>Attention to</th></tr></thead><tbody>`;
+    for(const r of net.tbts){ html += `<tr><td>${r["TB Technical Specialist"]||r.name||''}</td><td>${r["Letter Addressed to"]||r.letter||''}</td><td>${r["Attention to"]||r.attention||''}</td></tr>`; }
+    html += `</tbody></table></div>`;
+  }
+  if(net.itis_pa && Array.isArray(net.itis_pa) && net.itis_pa.length){
+    html += `<div class="panel" style="margin-top:14px;"><h3>ITIS PA</h3><table><thead><tr><th>Name</th><th>Area of assignment</th><th>CP number</th><th>Email Address</th></tr></thead><tbody>`;
+    for(const r of net.itis_pa){ html += `<tr><td>${r["Name "]||r.Name||r.name||''}</td><td>${r["Area of assignment "]||r["Area of assignment"]||r.area||''}</td><td>${r["CP number "]||r["CP number"]||r.cp||''}</td><td>${r["Email Address"]||r.email||''}</td></tr>`; }
+    html += `</tbody></table></div>`;
+  }
+  if(net.provinces){
+    const order = ["ALBAY","CAMARINES SUR","CAM SUR","CAMARINES NORTE","CAM NORTE","CATANDUANES","MASBATE","SORSOGON"];
+    for(const p of order){
+      const rows = net.provinces[p];
+      if(!rows || !rows.length) continue;
+      html += `<div class="panel" style="margin-top:14px;"><h3>${LABEL[p]||p}</h3><div style="overflow-x:auto;"><table><thead><tr><th>MUNICIPALITY</th><th>FACILITY</th><th>MAYOR</th><th>NTP COORDINATOR</th><th>MHO</th><th>NURSE</th><th>CONTACT NO. (NURSE)</th><th>MEDTECH</th><th>CONTACT NO. (MEDTECH)</th><th>EMAIL ADDRESS (FACILITY)</th></tr></thead><tbody>`;
+      for(const r of rows){
+        html += `<tr><td>${r.MUNICIPALITY||''}</td><td>${r.FACILITY||''}</td><td>${r.MAYOR||''}</td><td>${r["NTP COORDINATOR"]||''}</td><td>${r.MHO||''}</td><td>${r.NURSE||''}</td><td>${r["CONTACT NO. (NURSE)"]||''}</td><td>${r.MEDTECH||''}</td><td>${r["CONTACT NO. (MEDTECH)"]||''}</td><td>${r["EMAIL ADDRESS (FACILITY)"]||''}</td></tr>`;
+      }
+      html += `</tbody></table></div></div>`;
+    }
+  }
+  el.innerHTML = html;
 }
 
 
