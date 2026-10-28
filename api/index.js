@@ -132,6 +132,7 @@ module.exports = async (req, res) => {
           const grid = sheet.grid.slice(hr);
           const headerRows = sheet.grid.slice(0, hr);
           const headers = [];
+          const used = new Set();
           for (let i=0; i < (headerRows[0]||[]).length; i++) {
             let h = '';
             for (let r=0; r<headerRows.length; r++) {
@@ -141,6 +142,14 @@ module.exports = async (req, res) => {
                 break;
               }
             }
+            if (!h) { headers.push(''); continue; }
+            if (used.has(h)) {
+              let c = 2;
+              let nh = h + '_' + c;
+              while (used.has(nh)) { c++; nh = h + '_' + c; }
+              h = nh;
+            }
+            used.add(h);
             headers.push(h);
           }
           const rows = [];

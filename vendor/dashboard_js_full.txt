@@ -2594,7 +2594,13 @@ function renderNtpNetwork(el){
   let html = `<div class="section-title"><h2>NTP Network</h2></div>`;
   if(net.pho && Array.isArray(net.pho) && net.pho.length){
     html += `<div class="panel" style="margin-top:14px;"><h3>Provincial Health Office (PHO)</h3><table><thead><tr><th>Province</th><th>PHO</th><th>Nurse Coordinator</th><th>Contact Number</th><th>Email Address</th><th>MedTech Coordinator</th><th>Contact Number</th><th>Email Address</th></tr></thead><tbody>`;
-    for(const r of net.pho){ html += `<tr><td>${r.Province||r.province||''}</td><td>${r.PHO||r.pho||''}</td><td>${r["Nurse Coordinator"]||r.nurse||''}</td><td>${r["Contact Number"]||r.contact||''}</td><td>${r["Email Address"]||r.email||''}</td><td>${r["MedTech Coordinator"]||r.medtech||''}</td><td>${r["Contact Number_2"]||r.contact2||''}</td><td>${r["Email Address_2"]||r.email2||''}</td></tr>`; }
+    for(const r of net.pho){ 
+      const c1 = r["Contact Number"]||r.contact||r["Contact Number_2"]||'';
+      const e1 = r["Email Address"]||r.email||r["Email Address_2"]||'';
+      const c2 = (r["Contact Number_2"]&&r["Contact Number_2"]!==c1)?r["Contact Number_2"]: (r["Contact Number_3"]||'');
+      const e2 = (r["Email Address_2"]&&r["Email Address_2"]!==e1)?r["Email Address_2"]: (r["Email Address_3"]||'');
+      html += `<tr><td>${r.Province||r.province||''}</td><td>${r.PHO||r.pho||''}</td><td>${r["Nurse Coordinator"]||r.nurse||''}</td><td>${c1}</td><td>${e1}</td><td>${r["MedTech Coordinator"]||r.medtech||''}</td><td>${c2}</td><td>${e2}</td></tr>`; 
+    }
     html += `</tbody></table></div>`;
   }
   if(net.tbts && Array.isArray(net.tbts) && net.tbts.length){
