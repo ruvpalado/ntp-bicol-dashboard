@@ -1563,7 +1563,8 @@ function renderKPIRow(node){
   const d = node;
   const el = document.getElementById("kpiRow");
   // Awardee Recognition renders its own board inside #moduleContent - no generic KPI headline row.
-  if(state.module==="awards"){ el.style.display = "none"; return; }
+  // NTP Network shows only directory data from uploaded reference file - no KPIs.
+  if(state.module==="awards" || state.module==="ntpnetwork"){ el.style.display = "none"; return; }
   el.style.display = "";
   if(!d){ el.innerHTML = noData("No data available for this selection."); return; }
 
