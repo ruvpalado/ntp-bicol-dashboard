@@ -2591,7 +2591,7 @@ function renderNtpNetwork(el){
     el.innerHTML = `<div class="section-title"><h2>NTP Network</h2></div><div class="panel">${noData("No NTP Network data uploaded. Upload the NTP Network file in Admin → Regional Reference Data.")}</div>`;
     return;
   }
-  let html = `<div class="section-title"><h2>NTP Network</h2></div><div class="desc">NTP Directory from uploaded reference file.</div>`;
+  let html = `<div class="section-title"><h2>NTP Network</h2></div>`;
   if(net.pho && Array.isArray(net.pho) && net.pho.length){
     html += `<div class="panel" style="margin-top:14px;"><h3>Provincial Health Office (PHO)</h3><table><thead><tr><th>Province</th><th>PHO</th><th>Nurse Coordinator</th><th>Contact Number</th><th>Email Address</th><th>MedTech Coordinator</th><th>Contact Number</th><th>Email Address</th></tr></thead><tbody>`;
     for(const r of net.pho){ html += `<tr><td>${r.Province||r.province||''}</td><td>${r.PHO||r.pho||''}</td><td>${r["Nurse Coordinator"]||r.nurse||''}</td><td>${r["Contact Number"]||r.contact||''}</td><td>${r["Email Address"]||r.email||''}</td><td>${r["MedTech Coordinator"]||r.medtech||''}</td><td>${r["Contact Number_2"]||r.contact2||''}</td><td>${r["Email Address_2"]||r.email2||''}</td></tr>`; }
