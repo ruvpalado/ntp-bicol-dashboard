@@ -1503,6 +1503,14 @@ function normMuni(s) {
   v = v.replace(/\s*\([^)]*\)\s*$/, "").trim();
   return MUNI_ALIASES[v] || v;
 }
+// Barangay names are spelled inconsistently between CNR/MN rows and the POPULATION sheet, most
+// often with a trailing parenthetical ("BARANGAY VI (POB.)" vs "BARANGAY VI"). Strip it and
+// collapse whitespace so the two spellings resolve to the same denominator.
+function normBrgy(s) {
+  if (s === null || s === undefined) return null;
+  const v = String(s).trim().toUpperCase().replace(/\s+/g, " ").replace(/\s*\([^)]*\)\s*$/, "").trim();
+  return v || null;
+}
 function blank(v) { return v === null || v === undefined || (typeof v === "string" && v.trim() === ""); }
 function baseName(f) { return String(f).trim().toUpperCase().split(" - ")[0].trim(); }
 function cleanPop(v) {
@@ -1615,23 +1623,51 @@ function runPipeline(workbook, progressCb) {
   const provincePopulation = {};
   let regionPopulation = null;
   const muniPopulation = {};
-  let provFfill = null;
+  const barangayPopulation = {};
+  const barangayRowsByMuni = {};
+  let provFfill = null, muniFfill = null;
   for (const r of popRaw) {
     const c0 = r[0], c1 = r[1], c2 = r[2], c3 = r[3];
     if (c0 !== null && c0 !== undefined && String(c0).trim() !== "") provFfill = cp(c0);
     if (c0 !== null && String(c0).toLowerCase().includes("region")) {
       regionPopulation = typeof c3 === "number" ? c3 : parseFloat(c3);
+      muniFfill = null;
       continue;
     }
     if (!blank(c0) && blank(c1)) {
       const name = cp(c0);
       if (name && name !== "PROVINCE") provincePopulation[name] = c3;
+      muniFfill = null;
       continue;
     }
     if (blank(c0) && !blank(c1) && blank(c2)) {
       const m = normMuni(c1);
       if (m && m !== "MUNICIPALITY") muniPopulation[provFfill + "|" + m] = c3;
+      muniFfill = m;
+      continue;
     }
+    if (blank(c0) && blank(c1) && !blank(c2) && muniFfill) {
+      const b = normBrgy(c2), p = cleanPop(c3);
+      if (b && p !== null) {
+        barangayPopulation[provFfill + "|" + muniFfill + "|" + b] = p;
+        (barangayRowsByMuni[muniFfill] = barangayRowsByMuni[muniFfill] || []).push({ prov: provFfill, muni: muniFfill, brgy: b, population: p });
+      }
+    }
+  }
+  function barangaysFor(prov, muni) {
+    const all = barangayRowsByMuni[muni] || [];
+    if (!all.length) return [];
+    const exact = all.filter(x => x.prov === prov);
+    return exact.length ? exact : all;
+  }
+  function barangayPopulationFor(prov, muni, brgy) {
+    const direct = barangayPopulation[prov + "|" + muni + "|" + brgy];
+    if (direct !== undefined) return direct;
+    const all = barangayRowsByMuni[muni] || [];
+    const exact = all.filter(x => x.prov === prov && x.brgy === brgy);
+    if (exact.length === 1) return exact[0].population;
+    const any = all.filter(x => x.brgy === brgy);
+    return any.length === 1 ? any[0].population : null;
   }
   // Some areas the dashboard treats as province-level are, in PSA terms, municipalities nested
   // inside a province - Naga City sits under Camarines Sur. Their CASES are attributed to their own
@@ -3116,7 +3152,7 @@ function runPipeline(workbook, progressCb) {
       by_bact_status: byBactStatus };
   }
 
-  function computeNode(population, cnrSub, mnSub, tptSub, tsrSub, tptcSub, scrSub, spSub, stSub, gxSub, paSub, monthFilter, mnCatchmentSub, mnSubNr, cnrSubAll, tfSub, pictSub) {
+  function computeNode(population, cnrSub, mnSub, tptSub, tsrSub, tptcSub, scrSub, spSub, stSub, gxSub, paSub, monthFilter, mnCatchmentSub, mnSubNr, cnrSubAll, tfSub, pictSub, barangayScope) {
     tfSub = tfSub || []; pictSub = pictSub || [];
     if (monthFilter) {
       const ms = new Set(monthFilter);
@@ -3125,6 +3161,40 @@ function runPipeline(workbook, progressCb) {
       if (mnCatchmentSub) mnCatchmentSub = filterRows(mnCatchmentSub, ms);
       if (mnSubNr) mnSubNr = filterRows(mnSubNr, ms);
       if (cnrSubAll) cnrSubAll = filterRows(cnrSubAll, ms);
+    }
+    // Barangay-level CNR for a single facility: every barangay in that facility's municipality
+    // (from POPULATION) gets a row, including zero-case barangays. Numerator is CNR New/Relapse
+    // plus MN New/Relapse, matching the module's Case Notified definition; denominator is the
+    // barangay's own population. Patients living outside the facility's municipality are counted
+    // separately rather than silently dropped from the facility total.
+    let barangayCnr = null;
+    if (barangayScope) {
+      const scopeMuni = barangayScope.municipality;
+      const counts = {};
+      let outside = 0, unspecified = 0;
+      const countRow = r => {
+        const b = normBrgy(r.Brgy);
+        if (!b) { unspecified++; return; }
+        const m = normMuni(r["City/Municipality"]) || scopeMuni;
+        if (m !== scopeMuni) { outside++; return; }
+        counts[b] = (counts[b] || 0) + 1;
+      };
+      for (const r of cnrSub) countRow(r);
+      if (mnSubNr) for (const r of mnSubNr) countRow(r);
+      const rows = barangaysFor(barangayScope.province, scopeMuni).map(x => {
+        const cases = counts[x.brgy] || 0;
+        return { barangay: x.brgy, cases, population: x.population,
+          rate_per_100k: x.population > 0 ? Math.round(cases / x.population * 100000 * 10) / 10 : null };
+      });
+      if (!rows.length) {
+        for (const b in counts) {
+          const pop = barangayPopulationFor(barangayScope.province, scopeMuni, b);
+          rows.push({ barangay: b, cases: counts[b], population: pop,
+            rate_per_100k: pop > 0 ? Math.round(counts[b] / pop * 100000 * 10) / 10 : null });
+        }
+      }
+      rows.sort((a, b) => b.cases - a.cases || a.barangay.localeCompare(b.barangay));
+      barangayCnr = { rows, outside_cases: outside, unspecified_cases: unspecified };
     }
     const cnrCt = cnrSub.length, mnCt = mnSub.length;
     // Per the corrected CNR formula, only New and Relapse cases count towards case notification -
@@ -3513,6 +3583,7 @@ function runPipeline(workbook, progressCb) {
         adult_actual: adultActual, child_actual: childActual,
         by_bact_status: bact, bc, cdx, bccd_actual: bccdActual, by_patient_source: bySource, by_reg_group: byRegGroup,
         age_sex_detail: ageSexDetail, top_facilities: topFacilities,
+        ...(barangayCnr ? { barangays: barangayCnr.rows, barangay_outside_cases: barangayCnr.outside_cases, barangay_unspecified_cases: barangayCnr.unspecified_cases } : {}),
       },
       tsr: { dstb: tsrDs, drtb: tsrDr, mn: tsrMn, all: tsrAll, cure_dstb: cureDstb, cure_drtb: cureDrtb, tsr_trend_dstb: tsrTrendDstb, tsr_trend_drtb: tsrTrendDrtb, tsr_trend_mn: tsrTrendMn },
       mn: { total: mnCt, referred: mnReferred,
@@ -3727,7 +3798,8 @@ function runPipeline(workbook, progressCb) {
     const cnrCatchmentAllSub = (municipality && !facility) ? cnrCatchmentFor(province, municipality, caseProvince, cnr) : null;
     const cnrSub = (municipality && !facility) ? (cnrCatchmentSub || []) : filterByCols(cnrIncluded, fCol);
     const cnrSubAll = (municipality && !facility) ? (cnrCatchmentAllSub || []) : filterByCols(cnr, fCol);
-    return computeNode(pop, cnrSub, mnSub, tptSub, tsrSub, tptcSub, scrSub, spSub, stSub, gxSub, paSub, null, mnCatchmentSub, mnSubNr, cnrSubAll, tfSub, pictSub);
+    return computeNode(pop, cnrSub, mnSub, tptSub, tsrSub, tptcSub, scrSub, spSub, stSub, gxSub, paSub, null, mnCatchmentSub, mnSubNr, cnrSubAll, tfSub, pictSub,
+      facility ? { province: province, municipality: municipality } : null);
   }
 
   const nodes = {};

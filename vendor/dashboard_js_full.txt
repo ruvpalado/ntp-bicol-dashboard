@@ -351,6 +351,24 @@ function mnReferralByFacilityTable(list){
       <tr><td><b>Total</b></td><td><b>${fmt(totReceived)}</b></td><td><b>${fmt(totPending)}</b></td><td><b>${fmt(totReceived+totPending)}</b></td></tr>
     </tbody></table>`;
 }
+// Barangay-level CNR table. Only rendered when a specific facility is selected, because the
+// pipeline attaches `barangays` to facility nodes only. Rows are every barangay in that
+// facility's municipality (including zero-case ones) so the table is a complete picture, not
+// just the barangays that happened to report a case.
+function barangayCnrTable(d){
+  const rows = (d.cnr && d.cnr.barangays) || [];
+  if(!rows.length) return noData("No barangay population or CNR data for this facility.");
+  const body = rows.map(r =>
+    `<tr><td>${r.barangay}</td><td>${fmt(r.cases)}</td><td>${r.population!=null?fmt(r.population):"n/a"}</td><td>${r.rate_per_100k!=null?r.rate_per_100k:"n/a"}</td></tr>`
+  ).join("");
+  const totalCases = rows.reduce((s,r)=>s+r.cases,0);
+  const totalPop = rows.reduce((s,r)=>s+(r.population||0),0);
+  const totalRate = totalPop>0 ? Math.round(totalCases/totalPop*100000*10)/10 : null;
+  return `<table><thead><tr><th>Barangay</th><th>Cases</th><th>Population</th><th>CNR (per 100,000)</th></tr></thead>
+    <tbody>${body}
+      <tr><td><b>Total</b></td><td><b>${fmt(totalCases)}</b></td><td><b>${totalPop?fmt(totalPop):"n/a"}</b></td><td><b>${totalRate!=null?totalRate:"n/a"}</b></td></tr>
+    </tbody></table>`;
+}
 function patientSourceTable(bySource){
   bySource = bySource || {};
   const keys = Object.keys(bySource);
@@ -596,6 +614,8 @@ sb.querySelectorAll("button").forEach(b=> b.addEventListener("click", ()=>{
   // the Facility dropdown, sourced from GEO_MN), so the Municipality dropdown is locked to "All
   // Municipalities" and disabled while MN is active (see renderFilterBar()).
   if(state.module==="mn") state.muni="ALL";
+  // Target vs. Accomplishment lists only iDOTS/DOTS facilities, so never inherit the MN pseudo-municipality.
+  if(state.module==="target" && state.muni==="__MN__"){ state.muni="ALL"; state.facility="ALL"; }
   sb.querySelectorAll("button").forEach(x=>x.classList.remove("active")); b.classList.add("active");
   renderFilterBar();
   renderKPIRow(currentNode().node);
@@ -907,10 +927,10 @@ function renderFilterBar(){
           // actually has real CNR patient rows in this dataset.
           regularFacs = regularFacs.filter(f=>IDOTS_DOTS_FACILITIES.has(f) || CNR_REFERRING_WITH_DATA.has(f));
         }
-        else if(state.module==="tsr" || state.module==="tpt" || state.module==="screening" || state.module==="pict"){
-          // TSR, TPT, Screening & Presumptive, and PICT Examination all restrict the Facility
+        else if(state.module==="tsr" || state.module==="tpt" || state.module==="screening" || state.module==="pict" || state.module==="target"){
+          // TSR, TPT, Screening & Presumptive, PICT Examination, and Target vs. Accomplishment all restrict the Facility
           // dropdown to public-sector case-notifying (IDOTS/DOTS) facilities only, per the
-          // facility.xlsx dropdown configuration (CNR/TSR/TPT/Screening/PICT -> IDOTS Sheet).
+          // facility.xlsx dropdown configuration (CNR/TSR/TPT/Screening/PICT/Target -> IDOTS Sheet).
           regularFacs = regularFacs.filter(f=>IDOTS_DOTS_FACILITIES.has(f));
         }
         facSel.innerHTML = facilityOptionsHtml(regularFacs, showMnSummary, rtdlMode ? rtdlFacilityLabel : (labMode ? labFacilityLabel : null), regularFacs.length===0 ? labFacilityEmptyLabel(rtdlMode, labMode) : null);
@@ -964,7 +984,7 @@ function renderFilterBar(){
       <label>Municipality</label>
       <select id="fMuni" ${(munis.length && state.module!=="mn" && !rtdlMode && !labMode)? "":"disabled"}><option value="ALL" ${state.muni==="ALL"?'selected':''}>All Municipalities</option>
         ${munis.map(m=>`<option value="${m}" ${m===state.muni?'selected':''}>${titleCase(m)}</option>`).join("")}
-        ${(hasMN && state.module!=="cnr" && !rtdlMode && !labMode)? `<option value="__MN__" ${state.muni==="__MN__"?'selected':''}>MN Facility</option>` : ""}</select>
+        ${(hasMN && state.module!=="cnr" && state.module!=="target" && !rtdlMode && !labMode)? `<option value="__MN__" ${state.muni==="__MN__"?'selected':''}>MN Facility</option>` : ""}</select>
       <label>${facilityUsesMN() ? "MN Facility" : (rtdlMode ? "Facility (RTDL sites)" : (labMode ? "Facility (Laboratory sites)" : "Facility"))}</label>
       <select id="fFacility" disabled><option value="ALL">All Facilities</option></select>
       <label>Period</label>
@@ -1023,10 +1043,10 @@ function renderFilterBar(){
         // actually has real CNR patient rows in this dataset.
         regularFacs = regularFacs.filter(f=>IDOTS_DOTS_FACILITIES.has(f) || CNR_REFERRING_WITH_DATA.has(f));
       }
-      else if(state.module==="tsr" || state.module==="tpt" || state.module==="screening" || state.module==="pict"){
-        // TSR, TPT, Screening & Presumptive, and PICT Examination all restrict the Facility
+      else if(state.module==="tsr" || state.module==="tpt" || state.module==="screening" || state.module==="pict" || state.module==="target"){
+        // TSR, TPT, Screening & Presumptive, PICT Examination, and Target vs. Accomplishment all restrict the Facility
         // dropdown to public-sector case-notifying (IDOTS/DOTS) facilities only, per the
-        // facility.xlsx dropdown configuration (CNR/TSR/TPT/Screening/PICT -> IDOTS Sheet).
+        // facility.xlsx dropdown configuration (CNR/TSR/TPT/Screening/PICT/Target -> IDOTS Sheet).
         regularFacs = regularFacs.filter(f=>IDOTS_DOTS_FACILITIES.has(f));
       }
       facSel.innerHTML = facilityOptionsHtml(regularFacs, showMnSummary, rtdlMode ? rtdlFacilityLabel : (labMode ? labFacilityLabel : null), regularFacs.length===0 ? labFacilityEmptyLabel(rtdlMode, labMode) : null);
@@ -2080,8 +2100,10 @@ function renderCNRMnSummary(d, el){
 
 function renderCNR(d, el){
   if(state.facility===MN_SUMMARY_VALUE){ renderCNRMnSummary(d, el); return; }
+  const showBarangay = !!(state.facility && state.facility!=="ALL" && d.cnr.barangays);
   if(d.cnr.notified===0){
-    el.innerHTML = `<div class="section-title"><h2>CNR &middot; Case Notification</h2></div>` + noData("No CNR/MN case data for this scope.");
+    el.innerHTML = `<div class="section-title"><h2>CNR &middot; Case Notification</h2></div>` +
+      (showBarangay ? `<div class="panel"><h3>CNR by Barangay</h3><div class="desc">Selected facility &middot; CNR New/Relapse + MN New/Relapse &middot; showing data for: ${periodLabel()}</div>${barangayCnrTable(d)}</div>` : noData("No CNR/MN case data for this scope."));
     return;
   }
   const pdTotal = periodData(d.cnr.trend_total);
@@ -2118,7 +2140,14 @@ function renderCNR(d, el){
       <h3>Diagnosed All New and Relapse TB Cases (All Forms) by Age and Sex</h3>
       <div class="desc">CNR + MN combined, Registration Group New/Relapse only &middot; showing data for: ${periodLabel()}</div>
       ${ageSexDetailTable(d.cnr.age_sex_detail)}
-    </div>`;
+    </div>
+    ${showBarangay ? `<div class="panel">
+      <h3>CNR by Barangay</h3>
+      <div class="desc">Selected facility &middot; CNR New/Relapse + MN New/Relapse &middot; every barangay in this municipality, including zero-case barangays &middot; showing data for: ${periodLabel()}</div>
+      ${barangayCnrTable(d)}
+      ${d.cnr.barangay_outside_cases ? `<div class="desc">${fmt(d.cnr.barangay_outside_cases)} case(s) from patients residing outside this municipality are not included in the barangay table.</div>` : ""}
+      ${d.cnr.barangay_unspecified_cases ? `<div class="desc">${fmt(d.cnr.barangay_unspecified_cases)} case(s) have no barangay recorded.</div>` : ""}
+    </div>` : ""}`;
 
   {
     const ctbnTarget = (d.targets && d.targets.ctbn!=null) ? d.targets.ctbn : null;
@@ -2597,50 +2626,73 @@ function renderPict(d, el){
 
 function renderNtpNetwork(el){
   const net = (typeof KPI !== "undefined" && KPI.meta) ? KPI.meta.ntp_network : null;
-  if(!net || (!net.tbts && !net.itis_pa && !net.pho && (!net.provinces || Object.keys(net.provinces).length===0))){
+  const sheets = net && net.sheets ? net.sheets : null;
+  if(!sheets || !Object.keys(sheets).length){
     el.innerHTML = `<div class="section-title"><h2>NTP Network</h2></div><div class="panel">${noData("No NTP Network data uploaded. Upload the NTP Network file in Admin → Regional Reference Data.")}</div>`;
     return;
   }
+  // Directory tables keep their fixed headings. Only the NTP Coordinator column is omitted - the
+  // real field is MHO. A table stays visible even when its sheet is absent from the upload, so a
+  // missing section is obvious instead of silently disappearing.
+  const rowsOf = (...names) => {
+    for(const name of names){
+      const sheet = sheets[name];
+      if(sheet && Array.isArray(sheet.rows) && sheet.rows.length) return sheet.rows;
+    }
+    return [];
+  };
+  const table = (title, headers, rows, cells) => {
+    let out = `<div class="panel" style="margin-top:14px;"><h3>${title}</h3><div style="overflow-x:auto;"><table><thead><tr>`;
+    for(const h of headers) out += `<th>${h}</th>`;
+    out += `</tr></thead><tbody>`;
+    if(!rows.length){
+      out += `<tr><td colspan="${headers.length}" style="text-align:center;color:#647486;">No entries in the uploaded file.</td></tr>`;
+    }else{
+      for(const r of rows){
+        out += `<tr>`;
+        for(const value of cells(r)) out += `<td>${value || ''}</td>`;
+        out += `</tr>`;
+      }
+    }
+    return out + `</tbody></table></div></div>`;
+  };
   let html = `<div class="section-title"><h2>NTP Network</h2></div>`;
-  if(net.pho && Array.isArray(net.pho) && net.pho.length){
-    html += `<div class="panel" style="margin-top:14px;"><h3>Provincial Health Office (PHO)</h3><table><thead><tr><th>Province</th><th>PHO</th><th>Nurse Coordinator</th><th>Contact Number</th><th>Email Address</th><th>MedTech Coordinator</th><th>Contact Number</th><th>Email Address</th></tr></thead><tbody>`;
-    for(const r of net.pho){ 
+
+  const pho = rowsOf("PHO");
+  html += table("Provincial Health Office (PHO)",
+    ["Province","PHO","Nurse Coordinator","Contact Number","Email Address","MedTech Coordinator","Contact Number","Email Address"],
+    pho, r => {
       const c1 = r["Contact Number"]||r.contact||r["Contact Number_2"]||'';
       const e1 = r["Email Address"]||r.email||r["Email Address_2"]||'';
-      const c2 = (r["Contact Number_2"]&&r["Contact Number_2"]!==c1)?r["Contact Number_2"]: (r["Contact Number_3"]||'');
-      const e2 = (r["Email Address_2"]&&r["Email Address_2"]!==e1)?r["Email Address_2"]: (r["Email Address_3"]||'');
-      html += `<tr><td>${r.Province||r.province||''}</td><td>${r.PHO||r.pho||''}</td><td>${r["Nurse Coordinator"]||r.nurse||''}</td><td>${c1}</td><td>${e1}</td><td>${r["MedTech Coordinator"]||r.medtech||''}</td><td>${c2}</td><td>${e2}</td></tr>`; 
-    }
-    html += `</tbody></table></div>`;
+      const c2 = (r["Contact Number_2"]&&r["Contact Number_2"]!==c1)?r["Contact Number_2"]:(r["Contact Number_3"]||'');
+      const e2 = (r["Email Address_2"]&&r["Email Address_2"]!==e1)?r["Email Address_2"]:(r["Email Address_3"]||'');
+      return [r.Province||r.province, r.PHO||r.pho, r["Nurse Coordinator"]||r.nurse, c1, e1, r["MedTech Coordinator"]||r.medtech, c2, e2];
+    });
+
+  const tbts = rowsOf("TBTS");
+  const hasNewTbts = tbts.some(r => r["Contact Number"] || r["Email Address"] || r.contact || r.email || r["CP Number"]);
+  if(hasNewTbts){
+    html += table("TB Technical Specialists",
+      ["TB Technical Specialist","Contact Number","Email Address"],
+      tbts, r => [r["TB Technical Specialist"]||r.name||r.Name, r["Contact Number"]||r.contact||r["CP Number"]||r.cp, r["Email Address"]||r.email]);
+  }else{
+    html += table("TB Technical Specialists",
+      ["TB Technical Specialist","Letter Addressed to","Attention to"],
+      tbts, r => [r["TB Technical Specialist"]||r.name, r["Letter Addressed to"]||r.letter, r["Attention to"]||r.attention]);
   }
-  if(net.tbts && Array.isArray(net.tbts) && net.tbts.length){
-    const hasNewTbts = net.tbts.some(r => r["Contact Number"] || r["Email Address"] || r.contact || r.email || r["CP Number"]);
-    if(hasNewTbts){
-      html += `<div class="panel" style="margin-top:14px;"><h3>TB Technical Specialists</h3><table><thead><tr><th>TB Technical Specialist</th><th>Contact Number</th><th>Email Address</th></tr></thead><tbody>`;
-      for(const r of net.tbts){ html += `<tr><td>${r["TB Technical Specialist"]||r.name||r.Name||''}</td><td>${r["Contact Number"]||r.contact||r["CP Number"]||r.cp||''}</td><td>${r["Email Address"]||r.email||''}</td></tr>`; }
-      html += `</tbody></table></div>`;
-    }else{
-      html += `<div class="panel" style="margin-top:14px;"><h3>TB Technical Specialists</h3><table><thead><tr><th>TB Technical Specialist</th><th>Letter Addressed to</th><th>Attention to</th></tr></thead><tbody>`;
-      for(const r of net.tbts){ html += `<tr><td>${r["TB Technical Specialist"]||r.name||''}</td><td>${r["Letter Addressed to"]||r.letter||''}</td><td>${r["Attention to"]||r.attention||''}</td></tr>`; }
-      html += `</tbody></table></div>`;
-    }
-  }
-  if(net.itis_pa && Array.isArray(net.itis_pa) && net.itis_pa.length){
-    html += `<div class="panel" style="margin-top:14px;"><h3>ITIS PA</h3><table><thead><tr><th>Name</th><th>Area of assignment</th><th>CP number</th><th>Email Address</th></tr></thead><tbody>`;
-    for(const r of net.itis_pa){ html += `<tr><td>${r["Name "]||r.Name||r.name||''}</td><td>${r["Area of assignment "]||r["Area of assignment"]||r.area||''}</td><td>${r["CP number "]||r["CP number"]||r.cp||''}</td><td>${r["Email Address"]||r.email||''}</td></tr>`; }
-    html += `</tbody></table></div>`;
-  }
-  if(net.provinces){
-    const order = ["ALBAY","CAMARINES SUR","CAMARINES NORTE","CATANDUANES","MASBATE","SORSOGON"];
-    for(const p of order){
-      const rows = net.provinces[p] || net.provinces[p==="CAMARINES SUR"?"CAM SUR":p==="CAMARINES NORTE"?"CAM NORTE":p];
-      if(!rows || !rows.length) continue;
-      html += `<div class="panel" style="margin-top:14px;"><h3>${LABEL[p]||p}</h3><div style="overflow-x:auto;"><table><thead><tr><th>MUNICIPALITY</th><th>FACILITY</th><th>MAYOR</th><th>NTP COORDINATOR</th><th>MHO</th><th>NURSE</th><th>CONTACT NO. (NURSE)</th><th>MEDTECH</th><th>CONTACT NO. (MEDTECH)</th><th>EMAIL ADDRESS (FACILITY)</th></tr></thead><tbody>`;
-      for(const r of rows){
-        html += `<tr><td>${r.MUNICIPALITY||''}</td><td>${r.FACILITY||''}</td><td>${r.MAYOR||''}</td><td>${r["NTP COORDINATOR"]||''}</td><td>${r.MHO||''}</td><td>${r.NURSE||''}</td><td>${r["CONTACT NO. (NURSE)"]||''}</td><td>${r.MEDTECH||''}</td><td>${r["CONTACT NO. (MEDTECH)"]||''}</td><td>${r["EMAIL ADDRESS (FACILITY)"]||''}</td></tr>`;
-      }
-      html += `</tbody></table></div></div>`;
-    }
+
+  const itis = rowsOf("ITIS PA");
+  html += table("ITIS PA",
+    ["Name","Area of assignment","CP number","Email Address"],
+    itis, r => [r["Name"]||r.name, r["Area of assignment"]||r.area, r["CP number"]||r.cp, r["Email Address"]||r.email]);
+
+  const provinces = [["ALBAY","Albay"],["CAM SUR","Camarines Sur"],["CAM NORTE","Camarines Norte"],
+    ["CATANDUANES","Catanduanes"],["MASBATE","Masbate"],["SORSOGON","Sorsogon"]];
+  for(const [sheetName, label] of provinces){
+    const rows = rowsOf(sheetName);
+    html += table(label,
+      ["MUNICIPALITY","FACILITY","MHO","NURSE","CONTACT NO. (NURSE)","MEDTECH","CONTACT NO. (MEDTECH)","EMAIL ADDRESS (FACILITY)"],
+      rows, r => [r.MUNICIPALITY, r.FACILITY, r.MHO, r.NURSE, r["CONTACT NO. (NURSE)"], r.MEDTECH, r["CONTACT NO. (MEDTECH)"], r["EMAIL ADDRESS (FACILITY)"]]);
   }
   el.innerHTML = html;
 }
