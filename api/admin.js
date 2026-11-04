@@ -419,43 +419,27 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
   const analyticsSource = document.getElementById('analyticsSource');
   let analyticsPolling = null;
 
+  // CNR facility dropdown event listeners – re-render table when facility changes
+  let cnrCandidates = [];
+
   function loadAnalytics() {
     analyticsCardContent.innerHTML = '';
     analyticsSource.textContent = 'server events';
     analyticsCardContent.style.display = '';
 
-    // Display tracked events from server-side @vercel/analytics integration
-    // These are sent automatically regardless of API token configuration
-    const trackedEvents = {
-      server_health_check: 0,
-      consolidation_complete: 0,
-      consolidation_failed: 0,
-    };
-
+    // This deployment runs on a standalone server (not Vercel), so Vercel Web Analytics
+    // data is not available. The server still tracks events via @vercel/analytics/server
+    // for internal observability, but the frontend cannot retrieve them outside of Vercel.
     const p = document.createElement('p');
     p.style.fontSize = '13px';
     p.style.margin = '8px 0';
-    p.textContent = 'Server-side tracked events (shown without Vercel API token)';
+    p.textContent =
+      'Vercel Web Analytics data is not available in this deployment (standalone server). ' +
+      'The server tracks events internally via @vercel/analytics/server, but the API ' +
+      'is only accessible on Vercel. See the live dashboard for alternative metrics.';
     analyticsCardContent.appendChild(p);
 
-    const ul = document.createElement('ul');
-    ul.style.fontSize = '13px';
-    ul.style.margin = '8px 0 0 20px';
-    ul.style.lineHeight = '1.6';
-    Object.entries(trackedEvents).forEach(function (_ref) {
-      var event = _ref[0],
-        count = _ref[1];
-    });
-    Object.entries(trackedEvents).forEach(function (_ref2) {
-      var event = _ref2[0],
-        count = _ref2[1];
-      var li = document.createElement('li');
-      li.textContent = event + ': ' + count;
-      ul.appendChild(li);
-    });
-    analyticsCardContent.appendChild(ul);
-
-    // Link to full Vercel analytics dashboard
+    // Link to full Vercel analytics dashboard (will open in new tab)
     const a = document.createElement('a');
     a.href = 'https://vercel.com/ruvpalados-projects/ntp-bicol-dashboard/analytics';
     a.target = '_blank';
@@ -518,6 +502,9 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
   awProvince.addEventListener('change', loadAwardPanel);
   awCategory.addEventListener('change', loadAwardPanel);
   awQuarter.addEventListener('change', loadAwardPanel);
+  awGold.addEventListener('change', () => renderCandidatesTable(cnrCandidates));
+  awSilver.addEventListener('change', () => renderCandidatesTable(cnrCandidates));
+  awBronze.addEventListener('change', () => renderCandidatesTable(cnrCandidates));
 
   function fillLevelSelect(selectEl, candidates, current) {
     let html = '<option value="">-- none --</option>';
@@ -564,6 +551,15 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     }
 
     const tbody = document.getElementById('awCandidatesBody');
+    // Show standings only after a facility is selected; otherwise prompt the user.
+    const goldSelected = awGold.selectedIndex > 0;
+    const silverSelected = awSilver.selectedIndex > 0;
+    const bronzeSelected = awBronze.selectedIndex > 0;
+    const facilitySelected = goldSelected || silverSelected || bronzeSelected;
+    if (!facilitySelected && isCnr) {
+      tbody.innerHTML = '<tr><td colspan="' + colCount + '" class="slot-meta">Select a facility to see CNR standings.</td></tr>';
+      return;
+    }
     if (!candidates.length) {
       tbody.innerHTML = '<tr><td colspan="' + colCount + '" class="slot-meta">No candidates to rank for this selection.</td></tr>';
       return;
@@ -610,15 +606,15 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
         fetch(candQuery).then((r) => r.json()),
         fetch('/api/awards').then((r) => r.json()),
       ]);
-      const candidates = (candRes && candRes.candidates) || [];
+cnrCandidates = (candRes && candRes.candidates) || [];
       const period = String(new Date().getFullYear());
       const periodData = (currentRes.awards && currentRes.awards[period]) || {};
       const board = scope === 'region' ? (periodData.region || {}) : ((periodData.provinces || {})[province] || {});
       const catBoard = board[category] || {};
-      fillLevelSelect(awGold, candidates, catBoard.gold);
-      fillLevelSelect(awSilver, candidates, catBoard.silver);
-      fillLevelSelect(awBronze, candidates, catBoard.bronze);
-      renderCandidatesTable(candidates);
+      fillLevelSelect(awGold, cnrCandidates, catBoard.gold);
+      fillLevelSelect(awSilver, cnrCandidates, catBoard.silver);
+      fillLevelSelect(awBronze, cnrCandidates, catBoard.bronze);
+      renderCandidatesTable(cnrCandidates);
     } catch (err) {
       awShowStatus('err', 'Could not load standings: ' + err.message);
     }
