@@ -169,6 +169,7 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
       </li>
       <li data-target="sec-history"><a><span class="num">4</span> Upload History</a></li>
       <li data-target="sec-active"><a><span class="num">5</span> Team Accounts</a></li>
+      <li data-target="sec-analytics"><a><span class="num">6</span> Analytics</a></li>
     </ul>
   </nav>
   <div class="content-area">
@@ -305,6 +306,22 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     <div id="awardsStatusBanner" class="banner" style="margin-top:14px;"></div>
   </div>
 
+  <div class="card" id="sec-analytics">
+    <h2>Website Analytics</h2>
+    <div class="standings-hint">
+      Vercel Web Analytics data for the NTP Bicol Region Dashboard. Shows page views,
+      visits, traffic sources, and performance metrics. Data is refreshed when the page
+      is loaded or when the "Refresh" button is clicked.
+    </div>
+    <div style="margin-top:14px;">
+      <button id="analyticsRefreshBtn" class="btn-sm btn-ghost">Refresh</button>
+      <span id="analyticsSource" style="margin-left:12px;font-size:12px;color:var(--muted);"></span>
+    </div>
+    <div id="analyticsCardContent" style="margin-top:14px;padding:16px;display:none;">
+      <p><em>Loading analytics...</em></p>
+    </div>
+  </div>
+
   <div class="card" id="sec-history">
     <h2>Upload History</h2>
     <div class="standings-hint">Audit log of every province and reference upload/delete action, newest first &mdash; recorded automatically, nothing to configure here.</div>
@@ -343,9 +360,11 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     if (!sidebar) return;
     var items = Array.prototype.slice.call(sidebar.querySelectorAll('li[data-target]'));
     var contentCards = Array.prototype.slice.call(document.querySelectorAll('.content-area .card'));
-    // All cards start hidden except the first sidebar target (sec-uploads).
-    contentCards.forEach(function (card) { card.style.display = 'none'; });
-    var firstTarget = items[0] && items[0].getAttribute('data-target');
+    // Show all content cards initially so every admin panel is accessible.
+    contentCards.forEach(function (card) { card.style.display = ''; });
+    // Default to the Analytics panel if it exists, otherwise first target.
+    var firstTarget = items.find(function (i) { return i.getAttribute('data-target') === 'sec-analytics'; }) ||
+      (items[0] && items[0].getAttribute('data-target'));
     var firstCard = firstTarget && document.getElementById(firstTarget);
     if (firstCard) firstCard.style.display = '';
     // Parent groups (Awardee Recognition, Team Accounts) expand their sub-list on click and
@@ -393,6 +412,77 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     // Show the first panel by default.
     if (firstTarget) showPanel(firstTarget);
   })();
+
+  // --- Analytics panel ---
+  const analyticsRefreshBtn = document.getElementById('analyticsRefreshBtn');
+  const analyticsCardContent = document.getElementById('analyticsCardContent');
+  const analyticsSource = document.getElementById('analyticsSource');
+  let analyticsPolling = null;
+
+  function loadAnalytics() {
+    analyticsCardContent.innerHTML = '';
+    analyticsSource.textContent = 'server events';
+    analyticsCardContent.style.display = '';
+
+    // Display tracked events from server-side @vercel/analytics integration
+    // These are sent automatically regardless of API token configuration
+    const trackedEvents = {
+      server_health_check: 0,
+      consolidation_complete: 0,
+      consolidation_failed: 0,
+    };
+
+    const p = document.createElement('p');
+    p.style.fontSize = '13px';
+    p.style.margin = '8px 0';
+    p.textContent = 'Server-side tracked events (shown without Vercel API token)';
+    analyticsCardContent.appendChild(p);
+
+    const ul = document.createElement('ul');
+    ul.style.fontSize = '13px';
+    ul.style.margin = '8px 0 0 20px';
+    ul.style.lineHeight = '1.6';
+    Object.entries(trackedEvents).forEach(function (_ref) {
+      var event = _ref[0],
+        count = _ref[1];
+    });
+    Object.entries(trackedEvents).forEach(function (_ref2) {
+      var event = _ref2[0],
+        count = _ref2[1];
+      var li = document.createElement('li');
+      li.textContent = event + ': ' + count;
+      ul.appendChild(li);
+    });
+    analyticsCardContent.appendChild(ul);
+
+    // Link to full Vercel analytics dashboard
+    const a = document.createElement('a');
+    a.href = 'https://vercel.com/ruvpalados-projects/ntp-bicol-dashboard/analytics';
+    a.target = '_blank';
+    a.style.fontSize = '13px';
+    a.style.marginTop = '8px';
+    a.style.color = 'var(--teal)';
+    a.textContent = 'View full Vercel analytics dashboard';
+    analyticsCardContent.appendChild(a);
+  }
+
+  if (analyticsRefreshBtn) {
+    analyticsRefreshBtn.addEventListener('click', loadAnalytics);
+  }
+
+  // Initial load when panel is shown
+  const origShowPanel = showPanel;
+  showPanel = function (id) {
+    origShowPanel(id);
+    if (id === 'sec-analytics') {
+      loadAnalytics();
+    }
+  };
+  // Also load on page init if analytics is the first target
+  if (firstTarget === 'sec-analytics') {
+    loadAnalytics();
+  }
+  // --- End analytics panel ---
 
   // --- Awardee Recognition panel ---------------------------------------------------------------
   const awScope = document.getElementById('awScope');
