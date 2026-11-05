@@ -1712,7 +1712,7 @@ function renderKPIRow(node){
         <div class="kpi-card"><div class="accent" style="background:#0b2a4a"></div><div class="kpi-label">GenXpert Result Release</div>
           <div class="kpi-value">${lab.genxpert_release.has_data? pctS(lab.genxpert_release.compliance_pct) : "n/a"}</div><div class="kpi-sub">&le;3-day TAT compliance</div></div>
         <div class="kpi-card"><div class="accent" style="background:#9b59b6"></div><div class="kpi-label">Parago Case Examination</div>
-          <div class="kpi-value">${lab.parago.has_data? fmt(lab.parago.examined) : "n/a"}</div><div class="kpi-sub">cases examined</div></div>
+          <div class="kpi-value">${lab.parago.has_data? fmt(lab.parago.examined) : "n/a"}</div><div class="kpi-sub">examined: ${lab.parago.has_data? `${fmt(lab.parago.positive)} positive, ${fmt(lab.parago.examined - lab.parago.positive)} negative` : "n/a"}</div></div>
         <div class="kpi-card"><div class="accent" style="background:#95a5a6"></div><div class="kpi-label">Stool Base Examination</div>
           <div class="kpi-value">${lab.stool.has_data? fmt(lab.stool.examined) : "n/a"}</div><div class="kpi-sub">examined</div></div>
       `;
