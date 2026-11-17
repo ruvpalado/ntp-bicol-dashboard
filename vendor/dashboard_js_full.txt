@@ -90,7 +90,7 @@ const MODULES = [
   {key:"lab", label:"Laboratory"}, {key:"target", label:"Target vs Accomplishment"},
   {key:"pict", label:"PICT Examination"},
   {key:"ntpnetwork", label:"NTP Network"},
-  {key:"ntpnetwork_register", label:"Register"},
+  
   {key:"awards", label:"Awardee Recognition"},
 ];
 const LAB_SUBS = [
@@ -102,7 +102,6 @@ const LAB_SUBS = [
 // the map panel is now hidden by default and only built/shown once the sidebar's "Interactive Map"
 // toggle button is clicked - see the #mapToggleBtn wiring near the bottom of this file and the early
 // return at the top of renderMap() below.
-let state = { page:"REGION", province:null, muni:"ALL", facility:"ALL", module:"cnr", labSub:"summary", ntpSub:"register", period:"monthly", periodValue:"ALL", mapOpen:false };
 
 // --- Awardee Recognition: category config + data-computed standings -----------------------------
 // New module (per spec: "Develop a new module to recognize awardees across key performance
