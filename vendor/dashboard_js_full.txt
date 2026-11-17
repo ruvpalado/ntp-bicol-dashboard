@@ -90,6 +90,7 @@ const MODULES = [
   {key:"lab", label:"Laboratory"}, {key:"target", label:"Target vs Accomplishment"},
   {key:"pict", label:"PICT Examination"},
   {key:"ntpnetwork", label:"NTP Network"},
+  {key:"ntpnetwork_register", label:"Register"},
   {key:"awards", label:"Awardee Recognition"},
 ];
 const LAB_SUBS = [
@@ -2696,10 +2697,134 @@ function renderNtpNetwork(el){
       rows, r => [r.MUNICIPALITY, r.FACILITY, r.MHO, r.NURSE, r["CONTACT NO. (NURSE)"], r.MEDTECH, r["CONTACT NO. (MEDTECH)"], r["EMAIL ADDRESS (FACILITY)"]]);
   }
   el.innerHTML = html;
+function renderNtpNetworkRegister(el){
+  const net = (typeof KPI !== "undefined" && KPI.meta) ? KPI.meta.ntp_network : null;
+  const sheets = net && net.sheets ? net.sheets : null;
+  if(!sheets || !Object.keys(sheets).length){
+    el.innerHTML = "<div class="section-title"><h2>NTP Network Register</h2></div><div class="panel">No NTP Network data uploaded. Upload the NTP Network file in Admin right arrow Regional Reference Data.</div>";
+    return;
+  }
+  const provinces = [["ALBAY","Albay"],["CAM SUR","Camarines Sur"],["CAM NORTE","Camarines Norte"],["CATANDUANES","Catanduanes"],["MASBATE","Masbate"],["SORSOGON","Sorsogon"]];
+  let p = state.province || "ALBAY";
+  const provinceMuniMap = {};
+  const provinceNames = {};
+  for(const [code, name] of provinces){
+    const sheetKey = code;
+    const sheet = sheets[sheetKey] || sheets[code] || null;
+    if(sheet && Array.isArray(sheet.rows) && sheet.rows.length){
+      for(const r of sheet.rows){
+        const muni = r.MUNICIPALITY || r.province || "";
+        if(muni){
+          if(!provinceMuniMap[code]) provinceMuniMap[code] = [];
+          if(!provinceMuniMap[code].includes(muni)) provinceMuniMap[code].push(muni);
+          if(!provinceNames[code]) provinceNames[code] = name;
+        }
+      }
+    }
+  }
+  let html = "<div class="section-title"><h2>NTP Network Register</h2></div>";
+  html += "<div style="margin:16px 0;"><label>Province</label><select id="regProvince" onchange="updateRegProvince(this.value)">";
+  const provCodes = Object.keys(provinceMuniMap).length ? Object.keys(provinceMuniMap).sort() : ["ALBAY"];
+  for(const code of provCodes){
+    const name = provinceNames[code] || code;
+    html += "<option value=""+code+"" "+ (code===p?"selected":"")+">"+name+"</option>";
+  }
+  html += "<option value="ALL">All Provinces</option></select></div>";
+  html += "<div style="margin:16px 0;"><label>Municipality</label><select id="regMunicipality" onchange="updateRegFacility(this.value)"><option value="ALL">All Municipalities</option>";
+  const initialMuni = provinceMuniMap[p] || [];
+  for(const m of initialMuni.sort()){
+    html += "<option value=""+m+"">"+m+"</option>";
+  }
+  html += "</select></div>";
+  html += "<div style="margin:16px 0;"><label>Facility</label><select id="regFacility" " + (initialMuni.length ? "" : "disabled") + "">";
+  html += "<option value="ALL">All Facilities</option>";
+  html += "</select></div>";
+  html += "</div>";
+  el.innerHTML = html;
+}
+
+function updateRegProvince(val){
+  const prov = val;
+  const net = (typeof KPI !== "undefined" && KPI.meta) ? KPI.meta.ntp_network : null;
+  const sheets = net && net.sheets ? net.sheets : null;
+  const provinces = [["ALBAY","Albay"],["CAM SUR","Camarines Sur"],["CAM NORTE","Camarines Norte"],["CATANDUANES","Catanduanes"],["MASBATE","Masbate"],["SORSOGON","Sorsogon"]];
+  const muniList = [];
+  for(const [code, name] of provinces){
+    const sheetKey = code;
+    const sheet = sheets[sheetKey] || sheets[code] || null;
+    if(sheet && Array.isArray(sheet.rows) && sheet.rows.length){
+      for(const r of sheet.rows){
+        const muni = r.MUNICIPALITY || r.province || "";
+        if(muni && muni.indexOf(prov) === 0) muniList.push(muni);
+      }
+    }
+  }
+  const uniqueMuni = [...new Set(muniList)];
+  const muniSelect = document.getElementById("regMunicipality");
+  muniSelect.innerHTML = "<option value="ALL">All Municipalities</option>";
+  for(const m of uniqueMuni.sort()){
+    muniSelect.innerHTML += "<option value=""+m+"">"+m+"</option>";
+  }
+  updateRegFacility("ALL");
+}
+
+function updateRegFacility(val){
+  const muni = val;
+  const net = (typeof KPI !== "undefined" && KPI.meta) ? KPI.meta.ntp_network : null;
+  const sheets = net && net.sheets ? net.sheets : null;
+  const provinces = [["ALBAY","Albay"],["CAM SUR","Camarines Sur"],["CAM NORTE","Camarines Norte"],["CATANDUANES","Catanduanes"],["MASBATE","Masbate"],["SORSOGON","Sorsogon"]];
+  const facList = [];
+  for(const [code, name] of provinces){
+    const sheetKey = code;
+    const sheet = sheets[sheetKey] || sheets[code] || null;
+    if(sheet && Array.isArray(sheet.rows) && sheet.rows.length){
+      for(const r of sheet.rows){
+        const muni = r.MUNICIPALITY || r.province || "";
+        const fac = r.FACILITY || r.facility || "";
+        if(muni === muni && fac) facList.push(fac);
+      }
+    }
+  }
+  const uniqueFac = [...new Set(facList)];
+  const facSelect = document.getElementById("regFacility");
+  facSelect.innerHTML = "<option value="ALL">All Facilities</option>";
+  for(const f of uniqueFac.sort()){
+    facSelect.innerHTML += "<option value=""+f+"">"+f+"</option>";
+  }
+}
+
+// --- Live Excel upload
+
+
+function renderNtpNetworkRegister(el){
+  const net = (typeof KPI !== "undefined" && KPI.meta) ? KPI.meta.ntp_network : null;
+  const sheets = net && net.sheets ? net.sheets : null;
+  if(!sheets || !Object.keys(sheets).length){
+    el.innerHTML = `<div class="section-title"><h2>NTP Network Register</h2></div><div class="panel">${noData("No NTP Network data uploaded. Upload the NTP Network file in Admin right arrow Regional Reference Data.")}</div>`;
+    return;
+  }
+  const provinces = [["ALBAY","Albay"],["CAM SUR","Camarines Sur"],["CAM NORTE","Camarines Norte"],
+    ["CATANDUANES","Catanduanes"],["MASBATE","Masbate"],["SORSOGON","Sorsogon"]];
+  let p = state.province || "ALBAY";
+  const provinceOptions = provinces.map(pr=>`<option value="${pr[0]}" ${pr[0]===p?selected:}>${pr[1]}</option>`).join("");
+  let selectedProvince = p;
+  const facilityOptions = provinces.find(pr=>pr[0]===selectedProvince)?.[2]||[];
+  const facOpts = facilityOptions.map(f=>`<option value="${f}">${f}</option>`).join("");
+  const hasSheets = Object.keys(sheets).some(k=>k.toUpperCase()===selectedProvince.toUpperCase()||k.toUpperCase()===selectedProvince.replace(/ /g,"")?.");
+  let html = `<div class="section-title"><h2>NTP Network Register</h2></div>`;
+  html += `<div style="margin:16px 0;"><label>Province</label><select id="regProvince" onchange="updateRegFacility(this.value)">${provinceOptions}<option value="ALL">All Provinces</option></select></div>`;
+  html += `<div style="margin:16px 0;"><label>Facility</label><select id="regFacility" ${!facilityOptions.length? "disabled":""}><option value="ALL">All Facilities</option>${facOpts}</select></div>`;
+  if(hasSheets){
+    const provData = sheets[selectedProvince] || sheets[selectedProvince.replace(/ /g,"")] || null;
+    if(provData && Array.isArray(provData.rows) && provData.rows.length){
+      const rows = provData.rows;
+      html += `<div style="overflow-x:auto;"><table><thead><tr><th>Municipality</th><th>Facility</th><th>MHO</th><th>Nurse</th><th>Contact No. (Nurse)</th><th>MedTech</th><th>Contact No. (MedTech)</th><th>Email Address (Facility)</th></tr></thead><tbody>`;
+      for(const r of rows){
+        const c1 = r["Contact Number"]||r.contact||r["Contact Number_2"]||
 }
 
 
-// ---- Live Excel upload: reprocess a new Region.xlsx entirely in-browser (via NTP_PIPELINE, ported
+
 // from process_ntp_v4.py in ntp_pipeline_browser.js) and swap it in for KPI/NODES/GEO/GEO_MN/
 // GEO_MN_SHEET/RTDL_FACILITIES/etc, then reset to the Region-wide CNR view and re-render everything.
 // No data leaves the page - the workbook is parsed and recomputed entirely client-side via SheetJS
