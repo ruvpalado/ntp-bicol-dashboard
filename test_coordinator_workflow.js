@@ -40,6 +40,8 @@ const auth = require(BASE + "lib/auth");
 const regStore = require(BASE + "lib/coordinatorRegistrationStore");
 const reqStore = require(BASE + "lib/coordinatorRequestStore");
 const provinceStore = require(BASE + "lib/provinceStore");
+const registrationApi = require(BASE + "api/coordinator-registration.js");
+const requestApi = require(BASE + "api/coordinator-request.js");
 
 const results = [];
 const check = (n, ok, d) => results.push([n, !!ok, ok ? "" : (d || "")]);
@@ -77,6 +79,66 @@ function sessionCookieFor(identity) {
     check("registration store round-trips", all.length === 1 && all[0].id === id, JSON.stringify(all));
     await reqStore.saveAll([{ id: reqStore.newId(), scope: "ALL", status: "pending" }]);
     check("request store round-trips", (await reqStore.getAll()).length === 1);
+  }
+
+  {
+    const validReg = {
+      province: "Albay", facility: "Legazpi City Health Center",
+      coordinatorName: "Nurse Ana", role: "Nurse",
+      contactNumber: "09171234567", email: "ana@example.com",
+    };
+    const unauth = mockRes();
+    await registrationApi(mockReq({ method: "GET" }), unauth);
+    check("registration list requires auth", unauth._status === 401 && unauth._json.ok === false, unauth._body);
+
+    const bad = mockRes();
+    await registrationApi(mockReq({ method: "POST", body: Object.assign({}, validReg, { email: "bad" }) }), bad);
+    check("bad email rejected", bad._status === 400 && bad._json.ok === false, bad._body);
+
+    const badProv = mockRes();
+    await registrationApi(mockReq({ method: "POST", body: Object.assign({}, validReg, { province: "Mars" }) }), badProv);
+    check("bad province rejected", badProv._status === 400, badProv._body);
+
+    const ok = mockRes();
+    await registrationApi(mockReq({ method: "POST", body: validReg }), ok);
+    check("valid registration stored", ok._status === 200 && /^[a-f0-9]{24}$/.test(ok._json.id || ""), ok._body);
+    check("stored registration is pending", (await regStore.getAll()).some((x) => x.id === ok._json.id && x.status === "pending"));
+
+    const cookie = sessionCookieFor("master");
+    const list = mockRes();
+    await registrationApi(mockReq({ method: "GET", cookie }), list);
+    check("admin can list registrations", list._status === 200 && list._json.items.some((x) => x.id === ok._json.id));
+
+    const rej = mockRes();
+    await registrationApi(mockReq({ method: "POST", cookie, body: { id: ok._json.id, action: "reject" } }), rej);
+    check("admin can reject registration", rej._status === 200 && rej._json.item.status === "rejected", rej._body);
+
+    const invalidAction = mockRes();
+    await registrationApi(mockReq({ method: "POST", cookie, body: { id: ok._json.id, action: "approve" } }), invalidAction);
+    check("approve not wired yet returns 400", invalidAction._status === 400, invalidAction._body);
+  }
+
+  {
+    const validReq = {
+      requesterName: "Dr. Reyes", office: "Regional Office",
+      email: "reyes@example.com", scope: "ALBAY", purpose: "Program review",
+    };
+    const unauth = mockRes();
+    await requestApi(mockReq({ method: "GET" }), unauth);
+    check("request list requires auth", unauth._status === 401 && unauth._json.ok === false, unauth._body);
+
+    const bad = mockRes();
+    await requestApi(mockReq({ method: "POST", body: Object.assign({}, validReq, { purpose: "" }) }), bad);
+    check("missing purpose rejected", bad._status === 400, bad._body);
+
+    const ok = mockRes();
+    await requestApi(mockReq({ method: "POST", body: validReq }), ok);
+    check("valid request stored", ok._status === 200 && /^[a-f0-9]{24}$/.test(ok._json.id || ""), ok._body);
+
+    const cookie = sessionCookieFor("master");
+    const fulfill = mockRes();
+    await requestApi(mockReq({ method: "POST", cookie, body: { id: ok._json.id, action: "fulfill" } }), fulfill);
+    check("admin can fulfill request", fulfill._status === 200 && fulfill._json.item.status === "fulfilled", fulfill._body);
   }
 
   const pass = results.filter((r) => r[1]).length;
