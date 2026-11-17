@@ -2659,6 +2659,33 @@ function renderNtpNetwork(el){
     return out + `</tbody></table></div></div>`;
   };
   let html = `<div class="section-title"><h2>NTP Network</h2></div>`;
+  # Data privacy consent
+  html += "<div style='margin:16px 0;'>";
+  html += "<label style='display:inline-block; padding-right:8px;'>";
+  html += "<input type='checkbox' id='privacyConsent' required style='transform: scale(1.1);' />";
+  html += "I agree to the data privacy terms";
+  html += "</label>";
+  html += "<span id='privacyError' style='color:#b42318; font-size:12px; margin-left:4px;'>Required</span>";
+  html += "</div>";
+
+  // Cascading dropdowns: Province → Municipality → Facility
+  html += "<div style='margin:16px 0;'><label style='display:inline-block; padding-right:8px;'>Province</label>";
+  html += "<select id='regProvince' onchange='updateRegProvince(this.value)'>";
+  html += "<option value='ALBAY'>Albay</option>";
+  html += "<option value='CAM SUR'>Camarines Sur</option>";
+  html += "<option value='CAM NORTE'>Camarines Norte</option>";
+  html += "<option value='CATANDUANES'>Catanduanes</option>";
+  html += "<option value='MASBATE'>Masbate</option>";
+  html += "<option value='SORSOGON'>Sorsogon</option>";
+  html += "</select></div>";
+  html += "<div style='margin:16px 0;'><label style='display:inline-block; padding-right:8px;'>Municipality</label>";
+  html += "<select id='regMunicipality' onchange='updateRegFacility(this.value)'>";
+  html += "<option value='ALL'>All Municipalities</option>";
+  html += "</select></div>";
+  html += "<div style='margin:16px 0;'><label style='display:inline-block; padding-right:8px;'>Facility</label>";
+  html += "<select id='regFacility' disabled>";
+  html += "<option value='ALL'>All Facilities</option>";
+  html += "</select></div>";
 
   const pho = rowsOf("PHO");
   html += table("Provincial Health Office (PHO)",
@@ -2765,6 +2792,56 @@ function renderNtpNetwork(el){
   html += "<span id=\'privacyError\' style=\'color:#b42318; font-size:12px; margin-left:4px;\'>Required</span>";
   html += "</div>";
 el.innerHTML = html;
+
+function updateRegProvince(val){
+  const prov = val;
+  const net = (typeof KPI !== "undefined" && KPI.meta) ? KPI.meta.ntp_network : null;
+  const sheets = net && net.sheets ? net.sheets : null;
+  const provinces = [["ALBAY","Albay"],["CAM SUR","Camarines Sur"],["CAM NORTE","Camarines Norte"],["CATANDUANES","Catanduanes"],["MASBATE","Masbate"],["SORSOGON","Sorsogon"]];
+  const muniList = [];
+  for(const [code, name] of provinces){
+    const sheetKey = code;
+    const sheet = sheets[sheetKey] || sheets[code] || null;
+    if(sheet && Array.isArray(sheet.rows) && sheet.rows.length){
+      for(const r of sheet.rows){
+        const muni = r.MUNICIPALITY || r.province || "";
+        if(muni && muni.indexOf(prov) === 0) muniList.push(muni);
+      }
+    }
+  }
+  const uniqueMuni = [...new Set(muniList)];
+  const muniSelect = document.getElementById("regMunicipality");
+  muniSelect.innerHTML = "<option value=\"ALL\">All Municipalities</option>";
+  for(const m of uniqueMuni.sort()){
+    muniSelect.innerHTML += "<option value=\"" + m + "\">" + m + "</option>";
+  }
+  updateRegFacility("ALL");
+}
+
+function updateRegFacility(val){
+  const muni = val;
+  const net = (typeof KPI !== "undefined" && KPI.meta) ? KPI.meta.ntp_network : null;
+  const sheets = net && net.sheets ? net.sheets : null;
+  const provinces = [["ALBAY","Albay"],["CAM SUR","Camarines Sur"],["CAM NORTE","Camarines Norte"],["CATANDUANES","Catanduanes"],["MASBATE","Masbate"],["SORSOGON","Sorsogon"]];
+  const facList = [];
+  for(const [code, name] of provinces){
+    const sheetKey = code;
+    const sheet = sheets[sheetKey] || sheets[code] || null;
+    if(sheet && Array.isArray(sheet.rows) && sheet.rows.length){
+      for(const r of sheet.rows){
+        const muni = r.MUNICIPALITY || r.province || "";
+        const fac = r.FACILITY || r.facility || "";
+        if(muni === muni && fac) facList.push(fac);
+      }
+    }
+  }
+  const uniqueFac = [...new Set(facList)];
+  const facSelect = document.getElementById("regFacility");
+  facSelect.innerHTML = "<option value=\"ALL\">All Facilities</option>";
+  for(const f of uniqueFac.sort()){
+    facSelect.innerHTML += "<option value=\"" + f + "\">" + f + "</option>";
+  }
+}
 
 function renderNtpNetworkRegister(el){
   const net = (typeof KPI !== "undefined" && KPI.meta) ? KPI.meta.ntp_network : null;
