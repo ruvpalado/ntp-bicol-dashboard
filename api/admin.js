@@ -167,9 +167,15 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
           <li data-target="sec-awardee-panel"><a><span class="num">3.2</span> Awardee</a></li>
         </ul>
       </li>
-      <li data-target="sec-history"><a><span class="num">4</span> Upload History</a></li>
-      <li data-target="sec-active"><a><span class="num">5</span> Team Accounts</a></li>
-      <li data-target="sec-analytics"><a><span class="num">6</span> Analytics</a></li>
+      <li class="parent"><a><span class="num">4</span> NTP Network <span class="chev">&#9656;</span></a>
+        <ul class="sub">
+          <li data-target="sec-coordinator-registrations"><a><span class="num">4.1</span> Coordinator Registrations</a></li>
+          <li data-target="sec-coordinator-requests"><a><span class="num">4.2</span> Data Requests</a></li>
+        </ul>
+      </li>
+      <li data-target="sec-history"><a><span class="num">5</span> Upload History</a></li>
+      <li data-target="sec-active"><a><span class="num">6</span> Team Accounts</a></li>
+      <li data-target="sec-analytics"><a><span class="num">7</span> Analytics</a></li>
     </ul>
   </nav>
   <div class="content-area">
@@ -340,9 +346,21 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
       works regardless of anything here.
     </div>
     <div id="usersStatusBanner" class="banner" style="margin-top:0;margin-bottom:14px;"></div>
-    <div id="activeUsersBox"></div>
+
+    <div class="card" id="sec-coordinator-registrations">
+      <h2>Coordinator Registrations</h2>
+      <div class="standings-hint">Public submissions. Approve adds the coordinator to the NTP_NETWORK reference data and republishes the dashboard.</div>
+      <div id="coordinatorRegStatus" class="banner" style="margin-top:0;margin-bottom:14px;"></div>
+      <div id="coordinatorRegBox"><div class="slot-meta">Loading registrations...</div></div>
+    </div>
+
+    <div class="card" id="sec-coordinator-requests">
+      <h2>Facility Coordinator Data Requests</h2>
+      <div class="standings-hint">Public requests. Fulfill marks the request complete; send the data to the requester by email outside the dashboard.</div>
+      <div id="coordinatorReqStatus" class="banner" style="margin-top:0;margin-bottom:14px;"></div>
+      <div id="coordinatorReqBox"><div class="slot-meta">Loading requests...</div></div>
+    </div>
   </div>
-</div>
 </div>
 <script>
   // "Uploaded by" is no longer a free-text field - it's recorded straight off the signed-in
@@ -1168,7 +1186,113 @@ cnrCandidates = (candRes && candRes.candidates) || [];
       activeUsersBox.innerHTML = '<div class="slot-meta">Could not load accounts: ' + esc(err.message) + '</div>';
     }
   }
-  loadUsersPanel();
+loadUsersPanel();
+
+  // --- Coordinator Review Panels ---------------------------------------------------------------
+  function coordinatorStatus(box, cls, msg) {
+    box.className = 'banner ' + cls + ' show';
+    box.textContent = msg;
+  }
+  function coordinatorEsc(v) {
+    return String(v === undefined || v === null ? '' : v).replace(/[&<>"']/g, function (c) {
+      return { '&': '&', '<': '<', '>': '>', '"': '"', "'": ''' }[c];
+    });
+  }
+  function coordinatorRow(item, actions) {
+    return '<div class="slot"><div class="slot-head"><span class="slot-name">' +
+      coordinatorEsc(item.coordinatorName || item.requesterName) + '</span>' +
+      '<span class="pill ' + (item.status === 'pending' ? 'none' : 'ok') + '">' + coordinatorEsc(item.status) + '</span></div>' +
+      '<div class="slot-meta">' +
+      (item.facility ? coordinatorEsc(item.province) + ' &middot; ' + coordinatorEsc(item.facility) + ' &middot; ' + coordinatorEsc(item.role) + '<br>' : '') +
+      (item.office ? coordinatorEsc(item.office) + ' &middot; ' + coordinatorEsc(item.scope) + '<br>' : '') +
+      coordinatorEsc(item.email) + (item.contactNumber ? ' &middot; ' + coordinatorEsc(item.contactNumber) : '') +
+      '<br>submitted ' + coordinatorEsc(item.createdAt) + '</div>' +
+      '<div class="slot-actions">' + actions + '</div></div>';
+  }
+  async function coordinatorAction(url, id, action, statusBox, confirmMsg) {
+    if (confirmMsg && !window.confirm(confirmMsg)) return;
+    coordinatorStatus(statusBox, 'warn', 'Working...');
+    try {
+      var res = await fetch(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: id, action: action }),
+      });
+      var data = await res.json().catch(function () { return {}; });
+      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+      coordinatorStatus(statusBox, 'ok', 'Done.');
+      await Promise.all([loadCoordinatorRegistrations(), loadCoordinatorRequests()]);
+    } catch (err) {
+      coordinatorStatus(statusBox, 'err', err.message);
+    }
+  }
+  async function loadCoordinatorRegistrations() {
+    var box = document.getElementById('coordinatorRegBox');
+    try {
+      var res = await fetch('/api/coordinator-registration', { cache: 'no-store' });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+      var items = data.items || [];
+      var pending = items.filter(function (x) { return x.status === 'pending'; });
+      var decided = items.filter(function (x) { return x.status !== 'pending'; });
+      box.innerHTML = '<div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px;">PENDING (' + pending.length + ')</div>' +
+        (pending.length ? pending.map(function (x) {
+          return coordinatorRow(x,
+            '<button type="button" class="btn-sm" data-reg-approve="' + coordinatorEsc(x.id) + '">Approve</button>' +
+            '<button type="button" class="btn-sm btn-danger" data-reg-reject="' + coordinatorEsc(x.id) + '">Reject</button>');
+        }).join('') : '<div class="slot-meta">No pending registrations.</div>') +
+        '<div style="font-size:12px;font-weight:700;color:var(--muted);margin:14px 0 8px;">DECIDED (' + decided.length + ')</div>' +
+        (decided.length ? decided.map(function (x) { return coordinatorRow(x, ''); }).join('') : '<div class="slot-meta">No decided registrations.</div>');
+      Array.prototype.forEach.call(document.querySelectorAll('[data-reg-approve]'), function (btn) {
+        btn.addEventListener('click', function () {
+          coordinatorAction('/api/coordinator-registration', btn.getAttribute('data-reg-approve'), 'approve',
+            document.getElementById('coordinatorRegStatus'), 'Approve this coordinator into NTP_NETWORK reference data?');
+        });
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('[data-reg-reject]'), function (btn) {
+        btn.addEventListener('click', function () {
+          coordinatorAction('/api/coordinator-registration', btn.getAttribute('data-reg-reject'), 'reject',
+            document.getElementById('coordinatorRegStatus'), 'Reject this registration?');
+        });
+      });
+    } catch (err) {
+      box.innerHTML = '<div class="slot-meta">Could not load registrations: ' + coordinatorEsc(err.message) + '</div>';
+    }
+  }
+  async function loadCoordinatorRequests() {
+    var box = document.getElementById('coordinatorReqBox');
+    try {
+      var res = await fetch('/api/coordinator-request', { cache: 'no-store' });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+      var items = data.items || [];
+      var pending = items.filter(function (x) { return x.status === 'pending'; });
+      var decided = items.filter(function (x) { return x.status !== 'pending'; });
+      box.innerHTML = '<div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px;">PENDING (' + pending.length + ')</div>' +
+        (pending.length ? pending.map(function (x) {
+          return coordinatorRow(x,
+            '<button type="button" class="btn-sm" data-req-fulfill="' + coordinatorEsc(x.id) + '">Fulfill</button>' +
+            '<button type="button" class="btn-sm btn-danger" data-req-reject="' + coordinatorEsc(x.id) + '">Reject</button>');
+        }).join('') : '<div class="slot-meta">No pending requests.</div>') +
+        '<div style="font-size:12px;font-weight:700;color:var(--muted);margin:14px 0 8px;">DECIDED (' + decided.length + ')</div>' +
+        (decided.length ? decided.map(function (x) { return coordinatorRow(x, ''); }).join('') : '<div class="slot-meta">No decided requests.</div>');
+      Array.prototype.forEach.call(document.querySelectorAll('[data-req-fulfill]'), function (btn) {
+        btn.addEventListener('click', function () {
+          coordinatorAction('/api/coordinator-request', btn.getAttribute('data-req-fulfill'), 'fulfill',
+            document.getElementById('coordinatorReqStatus'), 'Mark this request fulfilled?');
+        });
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('[data-req-reject]'), function (btn) {
+        btn.addEventListener('click', function () {
+          coordinatorAction('/api/coordinator-request', btn.getAttribute('data-req-reject'), 'reject',
+            document.getElementById('coordinatorReqStatus'), 'Reject this request?');
+        });
+      });
+    } catch (err) {
+      box.innerHTML = '<div class="slot-meta">Could not load requests: ' + coordinatorEsc(err.message) + '</div>';
+    }
+  }
+  loadCoordinatorRegistrations();
+  loadCoordinatorRequests();
 
 </script>
 </body>

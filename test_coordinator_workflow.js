@@ -184,7 +184,15 @@ function sessionCookieFor(identity) {
     check("missing sheet leaves submission pending", (await regStore.getAll()).some((x) => x.id === submitCamSur._json.id && x.status === "pending"));
     check("missing sheet does not mutate reference", JSON.stringify(await provinceStore.getReferenceEntry(key)) === JSON.stringify(beforeMissing));
 
-    const beforeRollback = await provinceStore.getReferenceEntry(key);
+    {
+    const adminSrc = fs.readFileSync(BASE + "api/admin.js", "utf8");
+    check("admin has registration section", adminSrc.includes('id="sec-coordinator-registrations"'));
+    check("admin has request section", adminSrc.includes('id="sec-coordinator-requests"'));
+    check("admin loads registration API", adminSrc.includes("/api/coordinator-registration"));
+    check("admin loads request API", adminSrc.includes("/api/coordinator-request"));
+  }
+
+  const beforeRollback = await provinceStore.getReferenceEntry(key);
     const submitFail = mockRes();
     await registrationApi(mockReq({ method: "POST", body: {
       province: "Albay", facility: "Rollback Facility", coordinatorName: "MHO D", role: "MHO",
