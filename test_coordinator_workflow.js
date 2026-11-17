@@ -207,6 +207,13 @@ function sessionCookieFor(identity) {
     check("consolidation failure leaves pending", (await regStore.getAll()).some((x) => x.id === submitFail._json.id && x.status === "pending"));
   }
 
+  {
+    const js = fs.readFileSync(BASE + "vendor/dashboard_js_full.txt", "utf8");
+    check("public module no longer reads KPI network meta", !js.includes("KPI.meta.ntp_network"));
+    check("public module has registration form", js.includes('"/api/coordinator-registration"'));
+    check("public module has request form", js.includes('"/api/coordinator-request"'));
+    check("public module has ntpSub state", js.includes("ntpSub:"));
+  }
   const pass = results.filter((r) => r[1]).length;
   const fail = results.filter((r) => !r[1]);
   console.log("\n" + "=".repeat(70));
