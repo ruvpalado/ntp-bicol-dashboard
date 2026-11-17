@@ -101,7 +101,7 @@ const LAB_SUBS = [
 // the map panel is now hidden by default and only built/shown once the sidebar's "Interactive Map"
 // toggle button is clicked - see the #mapToggleBtn wiring near the bottom of this file and the early
 // return at the top of renderMap() below.
-let state = { page:"REGION", province:null, muni:"ALL", facility:"ALL", module:"cnr", labSub:"summary", period:"monthly", periodValue:"ALL", mapOpen:false };
+let state = { page:"REGION", province:null, muni:"ALL", facility:"ALL", module:"cnr", labSub:"summary", ntpSub:"register", period:"monthly", periodValue:"ALL", mapOpen:false };
 
 // --- Awardee Recognition: category config + data-computed standings -----------------------------
 // New module (per spec: "Develop a new module to recognize awardees across key performance
@@ -2625,77 +2625,89 @@ function renderPict(d, el){
     </tbody></table></div>`;
 }
 
+const NTP_SUBS = [{key:"register", label:"Register"}, {key:"request", label:"Request data"}];
+
+function ntpField(label, name, type, required, options){
+  const inputStyle = "width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:6px;font-size:12.5px;";
+  const labelStyle = "display:block;font-size:12px;font-weight:700;color:var(--navy);";
+  if(options){
+    return `<label style="${labelStyle}">${label}<br><select name="${name}" required style="${inputStyle}"><option value="">Select...</option>${options.map(o=>`<option value="${o}">${o}</option>`).join("")}</select></label>`;
+  }
+  if(type==="textarea"){
+    return `<label style="${labelStyle}">${label}<br><textarea name="${name}" rows="3" required style="${inputStyle};resize:vertical;"></textarea></label>`;
+  }
+  return `<label style="${labelStyle}">${label}<br><input name="${name}" type="${type}" ${required?"required":""} style="${inputStyle}"></label>`;
+}
+
+async function ntpSubmitForm(ev, url, msgId){
+  ev.preventDefault();
+  const form = ev.target;
+  const btn = form.querySelector('button[type="submit"]');
+  const msg = document.getElementById(msgId);
+  btn.disabled = true;
+  msg.style.color = "#647486";
+  msg.textContent = "Submitting...";
+  try{
+    const payload = Object.fromEntries(new FormData(form).entries());
+    const res = await fetch(url, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
+    const data = await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+    msg.style.color = "#0a7a4b";
+    msg.textContent = "Submitted. Your reference is " + data.id + ".";
+    form.reset();
+  }catch(err){
+    msg.style.color = "#b42318";
+    msg.textContent = err.message;
+  }finally{
+    btn.disabled = false;
+  }
+}
+
 function renderNtpNetwork(el){
-  const net = (typeof KPI !== "undefined" && KPI.meta) ? KPI.meta.ntp_network : null;
-  const sheets = net && net.sheets ? net.sheets : null;
-  if(!sheets || !Object.keys(sheets).length){
-    el.innerHTML = `<div class="section-title"><h2>NTP Network</h2></div><div class="panel">${noData("No NTP Network data uploaded. Upload the NTP Network file in Admin → Regional Reference Data.")}</div>`;
+  el.innerHTML = `<div class="section-title"><h2>NTP Network</h2></div>
+    <div class="panel" style="margin-bottom:14px;">
+      <div class="desc">Coordinator directory data is not displayed publicly. Use the forms below to register a coordinator or request directory data.</div>
+    </div>
+    <div class="subtabs" id="ntpSubtabs">${NTP_SUBS.map(s=>`<button data-sub="${s.key}" class="${state.ntpSub===s.key?"active":""}">${s.label}</button>`).join("")}</div>
+    <div id="ntpContent"></div>`;
+  document.getElementById("ntpSubtabs").querySelectorAll("button").forEach(b=> b.addEventListener("click", ()=>{
+    state.ntpSub = b.dataset.sub;
+    document.getElementById("ntpSubtabs").querySelectorAll("button").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");
+    renderNtpNetworkSub();
+  }));
+  renderNtpNetworkSub();
+}
+
+function renderNtpNetworkSub(){
+  const el = document.getElementById("ntpContent");
+  if(!el) return;
+  if(state.ntpSub==="request"){
+    el.innerHTML = `<form id="ntpRequestForm" class="panel" style="display:grid;gap:10px;max-width:640px;">
+      <h3>Request for Facility Coordinator Data</h3>
+      ${ntpField("Requester Name","requesterName","text",true)}
+      ${ntpField("Office","office","text",true)}
+      ${ntpField("Email","email","email",true)}
+      ${ntpField("Scope (province or ALL)","scope","text",true)}
+      ${ntpField("Purpose","purpose","textarea",true)}
+      <div id="ntpRequestMsg" class="desc"></div>
+      <button type="submit" class="btn-sm">Submit request</button>
+    </form>`;
+    document.getElementById("ntpRequestForm").addEventListener("submit", e=>ntpSubmitForm(e, "/api/coordinator-request", "ntpRequestMsg"));
     return;
   }
-  // Directory tables keep their fixed headings. Only the NTP Coordinator column is omitted - the
-  // real field is MHO. A table stays visible even when its sheet is absent from the upload, so a
-  // missing section is obvious instead of silently disappearing.
-  const rowsOf = (...names) => {
-    for(const name of names){
-      const sheet = sheets[name];
-      if(sheet && Array.isArray(sheet.rows) && sheet.rows.length) return sheet.rows;
-    }
-    return [];
-  };
-  const table = (title, headers, rows, cells) => {
-    let out = `<div class="panel" style="margin-top:14px;"><h3>${title}</h3><div style="overflow-x:auto;"><table><thead><tr>`;
-    for(const h of headers) out += `<th>${h}</th>`;
-    out += `</tr></thead><tbody>`;
-    if(!rows.length){
-      out += `<tr><td colspan="${headers.length}" style="text-align:center;color:#647486;">No entries in the uploaded file.</td></tr>`;
-    }else{
-      for(const r of rows){
-        out += `<tr>`;
-        for(const value of cells(r)) out += `<td>${value || ''}</td>`;
-        out += `</tr>`;
-      }
-    }
-    return out + `</tbody></table></div></div>`;
-  };
-  let html = `<div class="section-title"><h2>NTP Network</h2></div>`;
-
-  const pho = rowsOf("PHO");
-  html += table("Provincial Health Office (PHO)",
-    ["Province","PHO","Nurse Coordinator","Contact Number","Email Address","MedTech Coordinator","Contact Number","Email Address"],
-    pho, r => {
-      const c1 = r["Contact Number"]||r.contact||r["Contact Number_2"]||'';
-      const e1 = r["Email Address"]||r.email||r["Email Address_2"]||'';
-      const c2 = (r["Contact Number_2"]&&r["Contact Number_2"]!==c1)?r["Contact Number_2"]:(r["Contact Number_3"]||'');
-      const e2 = (r["Email Address_2"]&&r["Email Address_2"]!==e1)?r["Email Address_2"]:(r["Email Address_3"]||'');
-      return [r.Province||r.province, r.PHO||r.pho, r["Nurse Coordinator"]||r.nurse, c1, e1, r["MedTech Coordinator"]||r.medtech, c2, e2];
-    });
-
-  const tbts = rowsOf("TBTS");
-  const hasNewTbts = tbts.some(r => r["Contact Number"] || r["Email Address"] || r.contact || r.email || r["CP Number"]);
-  if(hasNewTbts){
-    html += table("TB Technical Specialists",
-      ["TB Technical Specialist","Contact Number","Email Address"],
-      tbts, r => [r["TB Technical Specialist"]||r.name||r.Name, r["Contact Number"]||r.contact||r["CP Number"]||r.cp, r["Email Address"]||r.email]);
-  }else{
-    html += table("TB Technical Specialists",
-      ["TB Technical Specialist","Letter Addressed to","Attention to"],
-      tbts, r => [r["TB Technical Specialist"]||r.name, r["Letter Addressed to"]||r.letter, r["Attention to"]||r.attention]);
-  }
-
-  const itis = rowsOf("ITIS PA");
-  html += table("ITIS PA",
-    ["Name","Area of assignment","CP number","Email Address"],
-    itis, r => [r["Name"]||r.name, r["Area of assignment"]||r.area, r["CP number"]||r.cp, r["Email Address"]||r.email]);
-
-  const provinces = [["ALBAY","Albay"],["CAM SUR","Camarines Sur"],["CAM NORTE","Camarines Norte"],
-    ["CATANDUANES","Catanduanes"],["MASBATE","Masbate"],["SORSOGON","Sorsogon"]];
-  for(const [sheetName, label] of provinces){
-    const rows = rowsOf(sheetName);
-    html += table(label,
-      ["MUNICIPALITY","FACILITY","MHO","NURSE","CONTACT NO. (NURSE)","MEDTECH","CONTACT NO. (MEDTECH)","EMAIL ADDRESS (FACILITY)"],
-      rows, r => [r.MUNICIPALITY, r.FACILITY, r.MHO, r.NURSE, r["CONTACT NO. (NURSE)"], r.MEDTECH, r["CONTACT NO. (MEDTECH)"], r["EMAIL ADDRESS (FACILITY)"]]);
-  }
-  el.innerHTML = html;
+  el.innerHTML = `<form id="ntpRegistrationForm" class="panel" style="display:grid;gap:10px;max-width:640px;">
+    <h3>Facility Coordinator Registration</h3>
+    ${ntpField("Province","province","text",true,["Albay","Camarines Sur","Camarines Norte","Catanduanes","Masbate","Sorsogon"])}
+    ${ntpField("Facility","facility","text",true)}
+    ${ntpField("Coordinator Name","coordinatorName","text",true)}
+    ${ntpField("Role","role","text",true,["MHO","Nurse","MedTech"])}
+    ${ntpField("Contact Number","contactNumber","text",true)}
+    ${ntpField("Email","email","email",true)}
+    <div id="ntpRegistrationMsg" class="desc"></div>
+    <button type="submit" class="btn-sm">Submit registration</button>
+  </form>`;
+  document.getElementById("ntpRegistrationForm").addEventListener("submit", e=>ntpSubmitForm(e, "/api/coordinator-registration", "ntpRegistrationMsg"));
 }
 
 
