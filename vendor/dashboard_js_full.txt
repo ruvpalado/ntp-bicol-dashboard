@@ -2829,40 +2829,6 @@ function renderNtpNetworkRegister(el){
 // --- Live Excel upload
 
 
-function renderNtpNetworkRegister(el){
-  const net = (typeof KPI !== "undefined" && KPI.meta) ? KPI.meta.ntp_network : null;
-  const sheets = net && net.sheets ? net.sheets : null;
-  if(!sheets || !Object.keys(sheets).length){
-    el.innerHTML = `<div class="section-title"><h2>NTP Network Register</h2></div><div class="panel">${noData("No NTP Network data uploaded. Upload the NTP Network file in Admin right arrow Regional Reference Data.")}</div>`;
-    return;
-  }
-  const provinces = [["ALBAY","Albay"],["CAM SUR","Camarines Sur"],["CAM NORTE","Camarines Norte"],
-    ["CATANDUANES","Catanduanes"],["MASBATE","Masbate"],["SORSOGON","Sorsogon"]];
-  let p = state.province || "ALBAY";
-  const provinceOptions = provinces.map(pr=>`<option value="${pr[0]}" ${pr[0]===p?selected:}>${pr[1]}</option>`).join("");
-  let selectedProvince = p;
-  const facilityOptions = provinces.find(pr=>pr[0]===selectedProvince)?.[2]||[];
-  const facOpts = facilityOptions.map(f=>`<option value="${f}">${f}</option>`).join("");
-  const hasSheets = Object.keys(sheets).some(k=>k.toUpperCase()===selectedProvince.toUpperCase()||k.toUpperCase()===selectedProvince.replace(/ /g,"")?.");
-  let html = `<div class="section-title"><h2>NTP Network Register</h2></div>`;
-  html += `<div style="margin:16px 0;"><label>Province</label><select id="regProvince" onchange="updateRegFacility(this.value)">${provinceOptions}<option value="ALL">All Provinces</option></select></div>`;
-  html += `<div style="margin:16px 0;"><label>Facility</label><select id="regFacility" ${!facilityOptions.length? "disabled":""}><option value="ALL">All Facilities</option>${facOpts}</select></div>`;
-  if(hasSheets){
-    const provData = sheets[selectedProvince] || sheets[selectedProvince.replace(/ /g,"")] || null;
-    if(provData && Array.isArray(provData.rows) && provData.rows.length){
-      const rows = provData.rows;
-      html += `<div style="overflow-x:auto;"><table><thead><tr><th>Municipality</th><th>Facility</th><th>MHO</th><th>Nurse</th><th>Contact No. (Nurse)</th><th>MedTech</th><th>Contact No. (MedTech)</th><th>Email Address (Facility)</th></tr></thead><tbody>`;
-      for(const r of rows){
-        const c1 = r["Contact Number"]||r.contact||r["Contact Number_2"]||
-}
-
-
-
-// from process_ntp_v4.py in ntp_pipeline_browser.js) and swap it in for KPI/NODES/GEO/GEO_MN/
-// GEO_MN_SHEET/RTDL_FACILITIES/etc, then reset to the Region-wide CNR view and re-render everything.
-// No data leaves the page - the workbook is parsed and recomputed entirely client-side via SheetJS
-// (XLSX, already loaded in <head>) and NTP_PIPELINE.runPipeline().
-function loadNewKPI(newKpi){
   KPI = newKpi;
   NODES = KPI.nodes; GEO = KPI.geo; GEO_MN = KPI.geo_mn || {}; GEO_MN_SHEET = KPI.geo_mn_sheet || {};
   RTDL_FACILITIES = new Set(KPI.meta.rtdl_facilities || []);
