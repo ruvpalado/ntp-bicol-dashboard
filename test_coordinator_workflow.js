@@ -141,6 +141,64 @@ function sessionCookieFor(identity) {
     check("admin can fulfill request", fulfill._status === 200 && fulfill._json.item.status === "fulfilled", fulfill._body);
   }
 
+  {
+    const key = "NTP_NETWORK";
+    const header = ["MUNICIPALITY", "FACILITY", "MHO", "NURSE", "CONTACT NO. (NURSE)", "MEDTECH", "CONTACT NO. (MEDTECH)", "EMAIL ADDRESS (FACILITY)"];
+    const entry = {
+      slotId: key,
+      sheets: { ALBAY: { headerRows: 2, grid: [["header"], header.slice(), ["Legazpi", "Old Facility", "Doc A", "", "", "", "", ""]] } },
+      rowCounts: { ALBAY: 1 },
+      meta: { filename: "fixture.xlsx", uploadedAt: "2026-01-01T00:00:00.000Z" },
+    };
+    await provinceStore.saveReferenceEntry(key, entry);
+
+    const submit = mockRes();
+    await registrationApi(mockReq({ method: "POST", body: {
+      province: "Albay", facility: "New Facility", coordinatorName: "Nurse B", role: "Nurse",
+      contactNumber: "09180000000", email: "b@example.com",
+    } }), submit);
+    const id = submit._json.id;
+    const cookie = sessionCookieFor("master");
+
+    const approve = mockRes();
+    await registrationApi(mockReq({ method: "POST", cookie, body: { id, action: "approve" } }), approve);
+    check("approval returns published", approve._status === 200 && approve._json.published === true, approve._body);
+    check("approval targets ALBAY", approve._json.sheet === "ALBAY", approve._body);
+
+    const updated = await provinceStore.getReferenceEntry(key);
+    const row = updated.sheets.ALBAY.grid[3];
+    check("approval appends exactly one row", updated.sheets.ALBAY.grid.length === 4);
+    check("approval maps facility/name/contact/email", row[1] === "New Facility" && row[3] === "Nurse B" && row[4] === "09180000000" && row[7] === "b@example.com", JSON.stringify(row));
+    check("approval increments rowCounts", updated.rowCounts.ALBAY === 2);
+    check("approval marks submission approved", (await regStore.getAll()).some((x) => x.id === id && x.status === "approved"));
+
+    const beforeMissing = await provinceStore.getReferenceEntry(key);
+    const submitCamSur = mockRes();
+    await registrationApi(mockReq({ method: "POST", body: {
+      province: "Camarines Sur", facility: "Naga Facility", coordinatorName: "MedTech C", role: "MedTech",
+      contactNumber: "09190000000", email: "c@example.com",
+    } }), submitCamSur);
+    const missing = mockRes();
+    await registrationApi(mockReq({ method: "POST", cookie, body: { id: submitCamSur._json.id, action: "approve" } }), missing);
+    check("missing province sheet rejected", missing._status === 500 && /no CAM SUR sheet/i.test(missing._json.error || ""), missing._body);
+    check("missing sheet leaves submission pending", (await regStore.getAll()).some((x) => x.id === submitCamSur._json.id && x.status === "pending"));
+    check("missing sheet does not mutate reference", JSON.stringify(await provinceStore.getReferenceEntry(key)) === JSON.stringify(beforeMissing));
+
+    const beforeRollback = await provinceStore.getReferenceEntry(key);
+    const submitFail = mockRes();
+    await registrationApi(mockReq({ method: "POST", body: {
+      province: "Albay", facility: "Rollback Facility", coordinatorName: "MHO D", role: "MHO",
+      contactNumber: "09200000000", email: "d@example.com",
+    } }), submitFail);
+    CONSOLIDATION_FAIL = true;
+    const rolledBack = mockRes();
+    await registrationApi(mockReq({ method: "POST", cookie, body: { id: submitFail._json.id, action: "approve" } }), rolledBack);
+    CONSOLIDATION_FAIL = false;
+    check("consolidation failure returns 500", rolledBack._status === 500, rolledBack._body);
+    check("consolidation failure restores reference", JSON.stringify(await provinceStore.getReferenceEntry(key)) === JSON.stringify(beforeRollback));
+    check("consolidation failure leaves pending", (await regStore.getAll()).some((x) => x.id === submitFail._json.id && x.status === "pending"));
+  }
+
   const pass = results.filter((r) => r[1]).length;
   const fail = results.filter((r) => !r[1]);
   console.log("\n" + "=".repeat(70));
