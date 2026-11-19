@@ -1,6 +1,6 @@
 // Drives the real /admin page in a DOM: renders it, runs its client script, and clicks the
 // per-province Upload buttons to prove the whole browser-side path actually fires.
-const { JSDOM } = require("/tmp/node_modules/jsdom");
+const { JSDOM } = require("jsdom");
 const Module = require("module");
 
 process.env.SESSION_SECRET = "test-secret";
@@ -70,6 +70,11 @@ async function boot(opts) {
           slots: PROVINCE_SLOTS.map((s) => ({ id: s.id, label: s.label, uploaded: false,
             status: "No file uploaded", filename: null, uploadedBy: null, uploadedAt: null,
             rowCounts: null, totalRows: 0, warnings: [] })),
+          referenceSlots: [
+            { id: "POPULATION", label: "Population" },
+            { id: "FACILITY_LIST", label: "Facility List" },
+            { id: "NTP_NETWORK", label: "NTP Network" },
+          ].map((s) => ({ ...s, uploaded: false, sheets: [], hint: "" })),
           history: [],
         }),
       };
@@ -108,7 +113,24 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 (async function run() {
   // ---------------------------------------------------------------- page boots
   {
-    const { window, scriptError } = await boot({});
+    const { window, scriptError, calls, html } = await boot({});
+    check("initial admin markup omits network upload and removed panels",
+      !/data-ref-slot="NTP_NETWORK"|id="sec-analytics"|id="sec-coordinator-/.test(html));
+    await sleep(30);
+    const doc = window.document;
+    check("removed admin sections are absent from navigation and panels",
+      !doc.querySelector('[data-target="sec-analytics"], #sec-analytics, #sec-coordinator-registrations, #sec-coordinator-requests') &&
+      !/NTP Network|Analytics/.test(doc.querySelector('.admin-sidebar').textContent));
+    check("NTP Network reference upload stays absent after slot refresh",
+      !doc.querySelector('[data-ref-slot="NTP_NETWORK"], [data-ref-upload-for="NTP_NETWORK"]') &&
+      !!doc.querySelector('[data-ref-upload-for="POPULATION"]') &&
+      !!doc.querySelector('[data-ref-upload-for="FACILITY_LIST"]'));
+    check("removed coordinator panels do not request data",
+      !calls.some((c) => /coordinator-registration|coordinator-request/.test(c.url)));
+    check("province uploads are the default admin panel",
+      doc.querySelector('[data-target="sec-uploads"]').classList.contains('active') &&
+      doc.getElementById('sec-uploads').style.display !== 'none');
+    check("Team Accounts retains its rendering container", !!doc.getElementById('activeUsersBox'));
     check("admin page script runs without error", !scriptError, scriptError && scriptError.message);
     const btns = window.document.querySelectorAll("#provinceSlots [data-upload-for]");
     check("7 upload buttons exist in the DOM", btns.length === 7, "got " + btns.length);
@@ -236,8 +258,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       headings.indexOf("Regional Reference Data") < headings.indexOf("Upload History") &&
       headings.indexOf("Awardee Recognition") < headings.indexOf("Upload History"),
       headings.join(" > "));
-    check("the Awardee Recognition admin panel is present (override picker only, no activation dates)",
-      headings.includes("Awardee Recognition"), headings.join(" > "));
+    check("Awardee and per-area activation panels remain available",
+      !!doc.querySelector('#sec-awardee-panel #awardsSaveBtn') &&
+      !!doc.querySelector('#sec-module-activation'), headings.join(" > "));
     check("the Activation Dates panel has been removed",
       !doc.getElementById("activationDatesBox") && !doc.getElementById("saveActivationBtn"),
       "activationDatesBox=" + !!doc.getElementById("activationDatesBox"));
