@@ -167,15 +167,8 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
           <li data-target="sec-awardee-panel"><a><span class="num">3.2</span> Awardee</a></li>
         </ul>
       </li>
-      <li class="parent"><a><span class="num">4</span> NTP Network <span class="chev">&#9656;</span></a>
-        <ul class="sub">
-          <li data-target="sec-coordinator-registrations"><a><span class="num">4.1</span> Coordinator Registrations</a></li>
-          <li data-target="sec-coordinator-requests"><a><span class="num">4.2</span> Data Requests</a></li>
-        </ul>
-      </li>
-      <li data-target="sec-history"><a><span class="num">5</span> Upload History</a></li>
-      <li data-target="sec-active"><a><span class="num">6</span> Team Accounts</a></li>
-      <li data-target="sec-analytics"><a><span class="num">7</span> Analytics</a></li>
+      <li data-target="sec-history"><a><span class="num">4</span> Upload History</a></li>
+      <li data-target="sec-active"><a><span class="num">5</span> Team Accounts</a></li>
     </ul>
   </nav>
   <div class="content-area">
@@ -224,7 +217,7 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
       ignored. If a slot is empty, the sheet falls back to whichever provincial file supplies it.
       Uses the same &ldquo;Uploaded by&rdquo; name as the area uploads above.
     </div>
-    <div class="ref-grid" id="referenceSlots">${referenceSlots.map(referenceSlotSkeleton).join("")}</div>
+    <div class="ref-grid" id="referenceSlots">${referenceSlots.filter((s) => s.id !== "NTP_NETWORK").map(referenceSlotSkeleton).join("")}</div>
   </div>
 
   <div class="card" id="sec-module-activation">
@@ -312,22 +305,6 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     <div id="awardsStatusBanner" class="banner" style="margin-top:14px;"></div>
   </div>
 
-  <div class="card" id="sec-analytics">
-    <h2>Website Analytics</h2>
-    <div class="standings-hint">
-      Vercel Web Analytics data for the NTP Bicol Region Dashboard. Shows page views,
-      visits, traffic sources, and performance metrics. Data is refreshed when the page
-      is loaded or when the "Refresh" button is clicked.
-    </div>
-    <div style="margin-top:14px;">
-      <button id="analyticsRefreshBtn" class="btn-sm btn-ghost">Refresh</button>
-      <span id="analyticsSource" style="margin-left:12px;font-size:12px;color:var(--muted);"></span>
-    </div>
-    <div id="analyticsCardContent" style="margin-top:14px;padding:16px;display:none;">
-      <p><em>Loading analytics...</em></p>
-    </div>
-  </div>
-
   <div class="card" id="sec-history">
     <h2>Upload History</h2>
     <div class="standings-hint">Audit log of every province and reference upload/delete action, newest first &mdash; recorded automatically, nothing to configure here.</div>
@@ -346,20 +323,7 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
       works regardless of anything here.
     </div>
     <div id="usersStatusBanner" class="banner" style="margin-top:0;margin-bottom:14px;"></div>
-
-    <div class="card" id="sec-coordinator-registrations">
-      <h2>Coordinator Registrations</h2>
-      <div class="standings-hint">Public submissions. Approve adds the coordinator to the NTP_NETWORK reference data and republishes the dashboard.</div>
-      <div id="coordinatorRegStatus" class="banner" style="margin-top:0;margin-bottom:14px;"></div>
-      <div id="coordinatorRegBox"><div class="slot-meta">Loading registrations...</div></div>
-    </div>
-
-    <div class="card" id="sec-coordinator-requests">
-      <h2>Facility Coordinator Data Requests</h2>
-      <div class="standings-hint">Public requests. Fulfill marks the request complete; send the data to the requester by email outside the dashboard.</div>
-      <div id="coordinatorReqStatus" class="banner" style="margin-top:0;margin-bottom:14px;"></div>
-      <div id="coordinatorReqBox"><div class="slot-meta">Loading requests...</div></div>
-    </div>
+    <div id="activeUsersBox"><div class="slot-meta">Loading accounts...</div></div>
   </div>
 </div>
 <script>
@@ -380,9 +344,8 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     var contentCards = Array.prototype.slice.call(document.querySelectorAll('.content-area .card'));
     // Show all content cards initially so every admin panel is accessible.
     contentCards.forEach(function (card) { card.style.display = ''; });
-    // Default to the Analytics panel if it exists, otherwise first target.
-    var firstTarget = items.find(function (i) { return i.getAttribute('data-target') === 'sec-analytics'; }) ||
-      (items[0] && items[0].getAttribute('data-target'));
+    // Open the first retained admin section.
+    var firstTarget = items[0] && items[0].getAttribute('data-target');
     var firstCard = firstTarget && document.getElementById(firstTarget);
     if (firstCard) firstCard.style.display = '';
     // Parent groups (Awardee Recognition, Team Accounts) expand their sub-list on click and
@@ -431,60 +394,7 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     if (firstTarget) showPanel(firstTarget);
   })();
 
-  // --- Analytics panel ---
-  const analyticsRefreshBtn = document.getElementById('analyticsRefreshBtn');
-  const analyticsCardContent = document.getElementById('analyticsCardContent');
-  const analyticsSource = document.getElementById('analyticsSource');
-  let analyticsPolling = null;
-
-  // CNR facility dropdown event listeners – re-render table when facility changes
   let cnrCandidates = [];
-
-  function loadAnalytics() {
-    analyticsCardContent.innerHTML = '';
-    analyticsSource.textContent = 'server events';
-    analyticsCardContent.style.display = '';
-
-    // This deployment runs on a standalone server (not Vercel), so Vercel Web Analytics
-    // data is not available. The server still tracks events via @vercel/analytics/server
-    // for internal observability, but the frontend cannot retrieve them outside of Vercel.
-    const p = document.createElement('p');
-    p.style.fontSize = '13px';
-    p.style.margin = '8px 0';
-    p.textContent =
-      'Vercel Web Analytics data is not available in this deployment (standalone server). ' +
-      'The server tracks events internally via @vercel/analytics/server, but the API ' +
-      'is only accessible on Vercel. See the live dashboard for alternative metrics.';
-    analyticsCardContent.appendChild(p);
-
-    // Link to full Vercel analytics dashboard (will open in new tab)
-    const a = document.createElement('a');
-    a.href = 'https://vercel.com/ruvpalados-projects/ntp-bicol-dashboard/analytics';
-    a.target = '_blank';
-    a.style.fontSize = '13px';
-    a.style.marginTop = '8px';
-    a.style.color = 'var(--teal)';
-    a.textContent = 'View full Vercel analytics dashboard';
-    analyticsCardContent.appendChild(a);
-  }
-
-  if (analyticsRefreshBtn) {
-    analyticsRefreshBtn.addEventListener('click', loadAnalytics);
-  }
-
-  // Initial load when panel is shown
-  const origShowPanel = showPanel;
-  showPanel = function (id) {
-    origShowPanel(id);
-    if (id === 'sec-analytics') {
-      loadAnalytics();
-    }
-  };
-  // Also load on page init if analytics is the first target
-  if (firstTarget === 'sec-analytics') {
-    loadAnalytics();
-  }
-  // --- End analytics panel ---
 
   // --- Awardee Recognition panel ---------------------------------------------------------------
   const awScope = document.getElementById('awScope');
@@ -865,7 +775,7 @@ cnrCandidates = (candRes && candRes.candidates) || [];
       if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
       provinceSlotsEl.innerHTML = data.slots.map(slotHtml).join('');
       if (referenceSlotsEl && data.referenceSlots) {
-        referenceSlotsEl.innerHTML = data.referenceSlots.map(refSlotHtml).join('');
+        referenceSlotsEl.innerHTML = data.referenceSlots.filter(function (slot) { return slot.id !== 'NTP_NETWORK'; }).map(refSlotHtml).join('');
       }
       if (historyBoxEl) {
         historyBoxEl.innerHTML = historyTableHtml(data.history);
@@ -1188,111 +1098,6 @@ cnrCandidates = (candRes && candRes.candidates) || [];
   }
 loadUsersPanel();
 
-  // --- Coordinator Review Panels ---------------------------------------------------------------
-  function coordinatorStatus(box, cls, msg) {
-    box.className = 'banner ' + cls + ' show';
-    box.textContent = msg;
-  }
-  function coordinatorEsc(v) {
-    return String(v === undefined || v === null ? '' : v).replace(/[&<>"']/g, function (c) {
-      return { '&': '&', '<': '<', '>': '>', '"': '"', "'": ''' }[c];
-    });
-  }
-  function coordinatorRow(item, actions) {
-    return '<div class="slot"><div class="slot-head"><span class="slot-name">' +
-      coordinatorEsc(item.coordinatorName || item.requesterName) + '</span>' +
-      '<span class="pill ' + (item.status === 'pending' ? 'none' : 'ok') + '">' + coordinatorEsc(item.status) + '</span></div>' +
-      '<div class="slot-meta">' +
-      (item.facility ? coordinatorEsc(item.province) + ' &middot; ' + coordinatorEsc(item.facility) + ' &middot; ' + coordinatorEsc(item.role) + '<br>' : '') +
-      (item.office ? coordinatorEsc(item.office) + ' &middot; ' + coordinatorEsc(item.scope) + '<br>' : '') +
-      coordinatorEsc(item.email) + (item.contactNumber ? ' &middot; ' + coordinatorEsc(item.contactNumber) : '') +
-      '<br>submitted ' + coordinatorEsc(item.createdAt) + '</div>' +
-      '<div class="slot-actions">' + actions + '</div></div>';
-  }
-  async function coordinatorAction(url, id, action, statusBox, confirmMsg) {
-    if (confirmMsg && !window.confirm(confirmMsg)) return;
-    coordinatorStatus(statusBox, 'warn', 'Working...');
-    try {
-      var res = await fetch(url, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: id, action: action }),
-      });
-      var data = await res.json().catch(function () { return {}; });
-      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
-      coordinatorStatus(statusBox, 'ok', 'Done.');
-      await Promise.all([loadCoordinatorRegistrations(), loadCoordinatorRequests()]);
-    } catch (err) {
-      coordinatorStatus(statusBox, 'err', err.message);
-    }
-  }
-  async function loadCoordinatorRegistrations() {
-    var box = document.getElementById('coordinatorRegBox');
-    try {
-      var res = await fetch('/api/coordinator-registration', { cache: 'no-store' });
-      var data = await res.json();
-      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
-      var items = data.items || [];
-      var pending = items.filter(function (x) { return x.status === 'pending'; });
-      var decided = items.filter(function (x) { return x.status !== 'pending'; });
-      box.innerHTML = '<div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px;">PENDING (' + pending.length + ')</div>' +
-        (pending.length ? pending.map(function (x) {
-          return coordinatorRow(x,
-            '<button type="button" class="btn-sm" data-reg-approve="' + coordinatorEsc(x.id) + '">Approve</button>' +
-            '<button type="button" class="btn-sm btn-danger" data-reg-reject="' + coordinatorEsc(x.id) + '">Reject</button>');
-        }).join('') : '<div class="slot-meta">No pending registrations.</div>') +
-        '<div style="font-size:12px;font-weight:700;color:var(--muted);margin:14px 0 8px;">DECIDED (' + decided.length + ')</div>' +
-        (decided.length ? decided.map(function (x) { return coordinatorRow(x, ''); }).join('') : '<div class="slot-meta">No decided registrations.</div>');
-      Array.prototype.forEach.call(document.querySelectorAll('[data-reg-approve]'), function (btn) {
-        btn.addEventListener('click', function () {
-          coordinatorAction('/api/coordinator-registration', btn.getAttribute('data-reg-approve'), 'approve',
-            document.getElementById('coordinatorRegStatus'), 'Approve this coordinator into NTP_NETWORK reference data?');
-        });
-      });
-      Array.prototype.forEach.call(document.querySelectorAll('[data-reg-reject]'), function (btn) {
-        btn.addEventListener('click', function () {
-          coordinatorAction('/api/coordinator-registration', btn.getAttribute('data-reg-reject'), 'reject',
-            document.getElementById('coordinatorRegStatus'), 'Reject this registration?');
-        });
-      });
-    } catch (err) {
-      box.innerHTML = '<div class="slot-meta">Could not load registrations: ' + coordinatorEsc(err.message) + '</div>';
-    }
-  }
-  async function loadCoordinatorRequests() {
-    var box = document.getElementById('coordinatorReqBox');
-    try {
-      var res = await fetch('/api/coordinator-request', { cache: 'no-store' });
-      var data = await res.json();
-      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
-      var items = data.items || [];
-      var pending = items.filter(function (x) { return x.status === 'pending'; });
-      var decided = items.filter(function (x) { return x.status !== 'pending'; });
-      box.innerHTML = '<div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px;">PENDING (' + pending.length + ')</div>' +
-        (pending.length ? pending.map(function (x) {
-          return coordinatorRow(x,
-            '<button type="button" class="btn-sm" data-req-fulfill="' + coordinatorEsc(x.id) + '">Fulfill</button>' +
-            '<button type="button" class="btn-sm btn-danger" data-req-reject="' + coordinatorEsc(x.id) + '">Reject</button>');
-        }).join('') : '<div class="slot-meta">No pending requests.</div>') +
-        '<div style="font-size:12px;font-weight:700;color:var(--muted);margin:14px 0 8px;">DECIDED (' + decided.length + ')</div>' +
-        (decided.length ? decided.map(function (x) { return coordinatorRow(x, ''); }).join('') : '<div class="slot-meta">No decided requests.</div>');
-      Array.prototype.forEach.call(document.querySelectorAll('[data-req-fulfill]'), function (btn) {
-        btn.addEventListener('click', function () {
-          coordinatorAction('/api/coordinator-request', btn.getAttribute('data-req-fulfill'), 'fulfill',
-            document.getElementById('coordinatorReqStatus'), 'Mark this request fulfilled?');
-        });
-      });
-      Array.prototype.forEach.call(document.querySelectorAll('[data-req-reject]'), function (btn) {
-        btn.addEventListener('click', function () {
-          coordinatorAction('/api/coordinator-request', btn.getAttribute('data-req-reject'), 'reject',
-            document.getElementById('coordinatorReqStatus'), 'Reject this request?');
-        });
-      });
-    } catch (err) {
-      box.innerHTML = '<div class="slot-meta">Could not load requests: ' + coordinatorEsc(err.message) + '</div>';
-    }
-  }
-  loadCoordinatorRegistrations();
-  loadCoordinatorRequests();
 
 </script>
 </body>
