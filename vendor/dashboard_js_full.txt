@@ -585,18 +585,6 @@ function regGroupLabel(k){ return REG_GROUP_LABELS[k] || titleCase(k); }
 // this only affects the displayed label.
 function muniCrumbLabel(muni){ return EFFECTIVE_SINGLE_FACILITY ? titleCase(EFFECTIVE_SINGLE_FACILITY) : titleCase(muni); }
 
-// Per instruction ("Remove the 'Upload New Excel' button from the live site, but keep it available
-// on the staging site"): hide the header's Upload button only when this exact page is being served
-// from the production Vercel domain. It stays visible everywhere else - any Vercel preview/staging
-// URL, localhost, and the offline ntp_dashboard_v4.html file opened directly (which has no hostname
-// at all under file://, so the strict equality check below naturally leaves it visible there too).
-const LIVE_PRODUCTION_HOST = "ntp-bicol-dashboard.vercel.app";
-const LIVE_PRODUCTION_HOSTS = ["ntp-bicol-dashboard.vercel.app", "ntp-bicol-dashboard-3cwhvv9tw-ruvpalados-projects.vercel.app"];
-if(typeof window !== "undefined" && window.location && LIVE_PRODUCTION_HOSTS.includes(window.location.hostname)){
-  const _uploadBox = document.querySelector(".upload-box");
-  if(_uploadBox) _uploadBox.style.display = "none";
-}
-
 const tb = document.getElementById("tabbar");
 tb.innerHTML = PAGES.map(p=>`<button data-p="${p}">${LABEL[p]}</button>`).join("");
 tb.querySelectorAll("button").forEach(b=> b.addEventListener("click", ()=>{
