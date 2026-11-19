@@ -131,6 +131,16 @@ for (const f of fs.readdirSync(path.join(ROOT, "lib")).filter((x) => x.endsWith(
       check("dashboard HTML builds from a consolidated dataset", !e2, e2 && e2.message);
       if (html) {
         check("built page has no unreplaced data placeholder", !html.includes("__DATA_JSON__"));
+        // Parsing the generated module alone misses syntax errors inside its browser-script strings.
+        const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
+        let scriptError = null;
+        try {
+          for (const [index, script] of scripts.entries()) {
+            new (require("vm").Script)(script[1], { filename: `dashboard-inline-${index + 1}.js` });
+          }
+        } catch (e) { scriptError = e; }
+        check("built page's browser scripts have valid JavaScript syntax",
+          scripts.length > 0 && !scriptError, scriptError && scriptError.message);
         check("built page's sidebar module registry still lists the Awardee Recognition tab",
           html.includes('key:"awards"'));
         // Flipped per "System Scheduling" instruction: the module is event-driven again, gated on an

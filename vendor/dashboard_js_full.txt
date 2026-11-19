@@ -103,6 +103,8 @@ const LAB_SUBS = [
 // toggle button is clicked - see the #mapToggleBtn wiring near the bottom of this file and the early
 // return at the top of renderMap() below.
 
+let state = { page:"REGION", province:null, muni:"ALL", facility:"ALL", module:"cnr", labSub:"summary", period:"monthly", periodValue:"ALL", mapOpen:false };
+
 // --- Awardee Recognition: category config + data-computed standings -----------------------------
 // New module (per spec: "Develop a new module to recognize awardees across key performance
 // categories... Recognition must be applied at both regional and provincial levels, depending on the
@@ -2658,7 +2660,7 @@ function renderNtpNetwork(el){
     return out + `</tbody></table></div></div>`;
   };
   let html = `<div class="section-title"><h2>NTP Network</h2></div>`;
-  # Data privacy consent
+  // Data privacy consent
   html += "<div style='margin:16px 0;'>";
   html += "<label style='display:inline-block; padding-right:8px;'>";
   html += "<input type='checkbox' id='privacyConsent' required style='transform: scale(1.1);' />";
@@ -2667,7 +2669,7 @@ function renderNtpNetwork(el){
   html += "<span id='privacyError' style='color:#b42318; font-size:12px; margin-left:4px;'>Required</span>";
   html += "</div>";
 
-  # Cascading dropdowns: Province → Municipality → Facility
+  // Cascading dropdowns: Province → Municipality → Facility
   html += "<div style='margin:16px 0;'><label style='display:inline-block; padding-right:8px;'>Province</label>";
   html += "<select id='regProvince' onchange='updateRegProvince(this.value)'>";
   html += "<option value='ALBAY'>Albay</option>";
@@ -2723,6 +2725,7 @@ function renderNtpNetwork(el){
       rows, r => [r.MUNICIPALITY, r.FACILITY, r.MHO, r.NURSE, r["CONTACT NO. (NURSE)"], r.MEDTECH, r["CONTACT NO. (MEDTECH)"], r["EMAIL ADDRESS (FACILITY)"]]);
   }
   el.innerHTML = html;
+}
 
 function updateRegProvince(val){
   const prov = val;
@@ -2742,9 +2745,9 @@ function updateRegProvince(val){
   }
   const uniqueMuni = [...new Set(muniList)];
   const muniSelect = document.getElementById("regMunicipality");
-  muniSelect.innerHTML = "<option value="ALL">All Municipalities</option>";
+  muniSelect.innerHTML = '<option value="ALL">All Municipalities</option>';
   for(const m of uniqueMuni.sort()){
-    muniSelect.innerHTML += "<option value="" + m + "">" + m + "</option>";
+    muniSelect.innerHTML += '<option value="' + m + '">' + m + '</option>';
   }
   updateRegFacility("ALL");
 }
@@ -2768,9 +2771,9 @@ function updateRegFacility(val){
   }
   const uniqueFac = [...new Set(facList)];
   const facSelect = document.getElementById("regFacility");
-  facSelect.innerHTML = "<option value="ALL">All Facilities</option>";
+  facSelect.innerHTML = '<option value="ALL">All Facilities</option>';
   for(const f of uniqueFac.sort()){
-    facSelect.innerHTML += "<option value="" + f + "">" + f + "</option>";
+    facSelect.innerHTML += '<option value="' + f + '">' + f + '</option>';
   }
 }
 
@@ -2778,7 +2781,7 @@ function renderNtpNetworkRegister(el){
   const net = (typeof KPI !== "undefined" && KPI.meta) ? KPI.meta.ntp_network : null;
   const sheets = net && net.sheets ? net.sheets : null;
   if(!sheets || !Object.keys(sheets).length){
-    el.innerHTML = "<div class="section-title"><h2>NTP Network Register</h2></div><div class="panel">No NTP Network data uploaded. Upload the NTP Network file in Admin right arrow Regional Reference Data.</div>";
+    el.innerHTML = '<div class="section-title"><h2>NTP Network Register</h2></div><div class="panel">No NTP Network data uploaded. Upload the NTP Network file in Admin right arrow Regional Reference Data.</div>';
     return;
   }
   const provinces = [["ALBAY","Albay"],["CAM SUR","Camarines Sur"],["CAM NORTE","Camarines Norte"],["CATANDUANES","Catanduanes"],["MASBATE","Masbate"],["SORSOGON","Sorsogon"]];
@@ -2799,35 +2802,29 @@ function renderNtpNetworkRegister(el){
       }
     }
   }
-  let html = "<div class="section-title"><h2>NTP Network Register</h2></div>";
-  html += "<div style="margin:16px 0;"><label>Province</label><select id="regProvince" onchange="updateRegProvince(this.value)">";
+  let html = '<div class="section-title"><h2>NTP Network Register</h2></div>';
+  html += '<div style="margin:16px 0;"><label>Province</label><select id="regProvince" onchange="updateRegProvince(this.value)">';
   const provCodes = Object.keys(provinceMuniMap).length ? Object.keys(provinceMuniMap).sort() : ["ALBAY"];
   for(const code of provCodes){
     const name = provinceNames[code] || code;
-    html += "<option value=""+code+"" "+ (code===p?"selected":"")+">"+name+"</option>";
+    html += '<option value="'+code+'" '+ (code===p?"selected":"")+'>'+name+'</option>';
   }
-  html += "<option value="ALL">All Provinces</option></select></div>";
-  html += "<div style="margin:16px 0;"><label>Municipality</label><select id="regMunicipality" onchange="updateRegFacility(this.value)"><option value="ALL">All Municipalities</option>";
+  html += '<option value="ALL">All Provinces</option></select></div>';
+  html += '<div style="margin:16px 0;"><label>Municipality</label><select id="regMunicipality" onchange="updateRegFacility(this.value)"><option value="ALL">All Municipalities</option>';
   const initialMuni = provinceMuniMap[p] || [];
   for(const m of initialMuni.sort()){
-    html += "<option value=""+m+"">"+m+"</option>";
+    html += '<option value="'+m+'">'+m+'</option>';
   }
   html += "</select></div>";
-  html += "<div style="margin:16px 0;"><label>Facility</label><select id="regFacility" " + (initialMuni.length ? "" : "disabled") + "">";
-  html += "<option value="ALL">All Facilities</option>";
+  html += '<div style="margin:16px 0;"><label>Facility</label><select id="regFacility" ' + (initialMuni.length ? "" : "disabled") + '>';
+  html += '<option value="ALL">All Facilities</option>';
   html += "</select></div>";
   html += "</div>";
   el.innerHTML = html;
 }
 
-  for(const f of uniqueFac.sort()){
-    facSelect.innerHTML += "<option value=""+f+"">"+f+"</option>";
-  }
-}
-
 // --- Live Excel upload
-
-
+function loadNewKPI(newKpi){
   KPI = newKpi;
   NODES = KPI.nodes; GEO = KPI.geo; GEO_MN = KPI.geo_mn || {}; GEO_MN_SHEET = KPI.geo_mn_sheet || {};
   RTDL_FACILITIES = new Set(KPI.meta.rtdl_facilities || []);
