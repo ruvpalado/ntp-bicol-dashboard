@@ -191,6 +191,14 @@ for (const f of fs.readdirSync(path.join(ROOT, "lib")).filter((x) => x.endsWith(
         // that never sets one behaves exactly as it did while gating was removed.
         check("built page's renderAwards has the activation-gating 'Coming Soon' path reachable again",
           /isAwardsActiveForCurrentPage\(\)\)\{\s*el\.innerHTML\s*=\s*renderAwardsComingSoon/.test(html));
+        check("public dashboard has no Excel upload control or file input",
+          !/<(?:button|input)\b[^>]*\bid=["'](?:uploadBtn|xlsxUpload)["']/i.test(html));
+        const markup = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
+        check("public dashboard has no Excel upload helper text",
+          !markup.includes("Upload New Excel") && !markup.includes("Re-reads Region.xlsx"));
+        const adminSource = fs.readFileSync(path.join(ROOT, "api/admin.js"), "utf8");
+        check("admin province and reference upload controls remain available",
+          adminSource.includes("data-upload-for") && adminSource.includes("/api/reference-upload"));
         check("built page includes the intro splash image", html.includes('id="introImage"'));
         check("built page has no leftover <video> element", !html.includes("<video"));
         check("built page script tags balance",

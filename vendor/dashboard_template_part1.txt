@@ -231,11 +231,6 @@ canvas{max-height:280px;}
       <h1 id="pageTitle">NTP Regional Dashboard</h1>
       <p id="pageSub"></p>
     </div>
-    <div class="upload-box">
-      <input type="file" id="xlsxUpload" accept=".xlsx" style="display:none">
-      <button id="uploadBtn" class="upload-btn" type="button">Upload New Excel</button>
-      <span id="uploadStatus" class="upload-status">Re-reads Region.xlsx and refreshes every figure in your browser - no data leaves this page.</span>
-    </div>
   </div>
 </header>
 <div class="tabbar-row">
