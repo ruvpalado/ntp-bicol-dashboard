@@ -55,6 +55,36 @@ falls back to whichever provincial file supplies it. The Population slot reads b
 - `vercel.json` — routes `/`, `/login`, `/admin`, `/logout`, `/signup`, `/forgot-password`,
   `/reset-password` to their handlers
 
+## Admin-only dashboard visitors
+
+In `/admin`, choose **Dashboard Visitors**, then **Load / refresh report**. The report shows
+page views, estimated unique browsers and a daily breakdown for the last 30 calendar days,
+including today, in Philippine time. Counting starts only after this feature is deployed;
+there is no historical backfill. Zero means no recorded views, not proof that nobody visited.
+
+The public dashboard sends one same-origin request to `/api/traffic` per page load. Successful
+collection sets an HttpOnly, SameSite cookie containing a random browser identifier, renewed
+for 30 days. Clearing cookies or using multiple browsers/devices changes the unique estimate.
+Signed-in administrators, known bots, Do Not Track and Global Privacy Control are excluded;
+blocked scripts, failed collection and other bots can affect accuracy. This is not an audited
+count of individual people or concurrent users.
+
+The existing connected **private** Blob store persists immutable events (no new service or secret).
+It stores only a date, hashed random browser identifier and event UUID; no IP addresses, account
+identities, page content or referrers. The read endpoint requires the same signed session as
+`/admin`, returns only aggregate counts and sends `private, no-store`. Public callers cannot read
+the report. Preview, production and local-development events are kept in separate namespaces.
+
+Each view uses a small Blob write; loading a report lists the selected 30 daily prefixes with
+pagination. Reports exceeding 50,000 views fail explicitly rather than silently undercounting.
+This is intended for a modest-traffic dashboard; storage operations incur the store's normal usage.
+The 30-day window is a reporting window, not an automatic deletion policy: older private event
+files remain until removed through storage management. Storage failures leave the public dashboard
+usable and show an unavailable state (not fabricated zeros) in the admin report.
+
+Run `node test_visitor_analytics.js` for collection, authentication, pagination/concurrency,
+Philippine-day boundaries and the admin browser-script regression checks.
+
 ## One-time deployment steps
 
 1. **Install the Vercel CLI** (if you don't have it): `npm install -g vercel`

@@ -6,6 +6,7 @@
 // files that have actually been uploaded. Until the first one arrives there is genuinely nothing to
 // report, so this serves a plain "awaiting uploads" page naming the outstanding areas rather than an
 // empty dashboard that looks broken - or, worse, stale numbers presented as if they were current.
+const { withVisitorTracking } = require("../lib/visitorStore");
 const { getCurrentKpi } = require("../lib/kpiStore");
 const { getCurrentAwards, getActivationDates } = require("../lib/awardsStore");
 const { buildDashboardHtml } = require("../lib/buildDashboardHtml");
@@ -118,7 +119,7 @@ module.exports = async (req, res) => {
       }
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.setHeader("Cache-Control", "no-store");
-      res.status(200).send(awaitingUploadsHtml(outstanding, !blobConfigured()));
+      res.status(200).send(withVisitorTracking(awaitingUploadsHtml(outstanding, !blobConfigured())));
       return;
     }
 
@@ -185,7 +186,7 @@ module.exports = async (req, res) => {
     const html = buildDashboardHtml(kpi, awards, activation);
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "no-store");
-    res.status(200).send(html);
+    res.status(200).send(withVisitorTracking(html));
   } catch (err) {
     console.error("GET / failed:", err);
     res.setHeader("Content-Type", "text/html; charset=utf-8");
