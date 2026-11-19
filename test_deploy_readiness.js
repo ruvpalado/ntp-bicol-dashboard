@@ -182,6 +182,12 @@ for (const f of fs.readdirSync(path.join(ROOT, "lib")).filter((x) => x.endsWith(
           scripts.length > 0 && !scriptError, scriptError && scriptError.message);
         check("built page's sidebar module registry still lists the Awardee Recognition tab",
           html.includes('key:"awards"'));
+        const moduleRegistry = html.match(/const MODULES = (\[[\s\S]*?\n\]);/);
+        const publicModules = moduleRegistry
+          ? require("vm").runInNewContext(moduleRegistry[1]) : null;
+        check("public navigation omits NTP Network and preserves the remaining modules",
+          !!publicModules && publicModules.map((m) => m.key).join(",") ===
+          "cnr,tsr,mn,tpt,screening,lab,target,pict,awards");
         // Flipped per "System Scheduling" instruction: the module is event-driven again, gated on an
         // admin-configured activation date/time (see lib/awardsStore.js's getActivationDate/
         // setActivationDate and api/index.js's expandActivation()). Previously this asserted the
