@@ -169,6 +169,7 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
       </li>
       <li data-target="sec-history"><a><span class="num">4</span> Upload History</a></li>
       <li data-target="sec-active"><a><span class="num">5</span> Team Accounts</a></li>
+      <li data-target="sec-visitors"><a href="#sec-visitors"><span class="num">6</span> Dashboard Visitors</a></li>
     </ul>
   </nav>
   <div class="content-area">
@@ -197,6 +198,29 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
       ${dataQualityIssues.map((m) => `<li>${String(m).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</li>`).join("")}
     </ul>
   </div>` : ""}
+
+  <div class="card" id="sec-visitors">
+    <h2>Dashboard Visitors</h2>
+    <p class="standings-hint">Public dashboard access over the last 30 days, including today (Philippine time).
+      Tracking starts after deployment; earlier visits cannot be recovered. Signed-in admins and known bots
+      are excluded. Unique visitors estimate browsers using a 30-day cookie, not individual people;
+      cleared cookies, multiple devices and blocked tracking affect counts. Do Not Track and Global Privacy
+      Control are respected. Preview traffic is separate from production.</p>
+    <button type="button" id="loadVisitorReport">Load / refresh report</button>
+    <p id="visitorReportStatus" class="standings-hint" role="status">Load the report to see recorded visits. This report is admin-only.</p>
+    <div id="visitorReport" hidden>
+      <div class="status-row"><span>Page views (30 days)</span><b id="visitorViews"></b></div>
+      <div class="status-row"><span>Unique visitors (30 days, estimated)</span><b id="visitorUnique"></b></div>
+      <div class="status-row"><span>Page views today</span><b id="visitorToday"></b></div>
+      <div style="overflow-x:auto;margin-top:16px;">
+        <table style="width:100%;text-align:left;font-size:12px;border-collapse:collapse;">
+          <caption style="text-align:left;margin-bottom:8px;">Daily access &mdash; Asia/Manila</caption>
+          <thead><tr><th scope="col">Date</th><th scope="col">Page views</th><th scope="col">Unique visitors</th></tr></thead>
+          <tbody id="visitorDaily"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
   <div class="card" id="sec-uploads">
     <h2>Province &amp; City Data Uploads</h2>
@@ -393,6 +417,42 @@ function adminPageHtml({ updatedAt, source, storageWarning, dataQualityIssues, p
     // Show the first panel by default.
     if (firstTarget) showPanel(firstTarget);
   })();
+
+  // Counts are fetched only on demand from the authenticated endpoint, never embedded publicly.
+  document.getElementById('loadVisitorReport').addEventListener('click', async function () {
+    var button = this;
+    var status = document.getElementById('visitorReportStatus');
+    var report = document.getElementById('visitorReport');
+    button.disabled = true;
+    report.hidden = true;
+    status.textContent = 'Loading visitor report...';
+    try {
+      var response = await fetch('/api/traffic', { credentials: 'same-origin', cache: 'no-store' });
+      if (response.status === 401) throw new Error('Your session has expired. Sign in again.');
+      var data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not load visitor report.');
+      document.getElementById('visitorViews').textContent = data.views.toLocaleString();
+      document.getElementById('visitorUnique').textContent = data.visitors.toLocaleString();
+      document.getElementById('visitorToday').textContent = data.daily[0].views.toLocaleString();
+      var tbody = document.getElementById('visitorDaily');
+      tbody.textContent = '';
+      data.daily.forEach(function (day) {
+        var row = document.createElement('tr');
+        [day.date, day.views, day.visitors].forEach(function (value) {
+          var cell = document.createElement('td');
+          cell.textContent = String(value);
+          cell.style.padding = '7px 0';
+          row.appendChild(cell);
+        });
+        tbody.appendChild(row);
+      });
+      status.textContent = data.environment + ' report: ' + data.from + ' to ' + data.to +
+        (data.views ? '. Recent visits may take a moment to appear.' : '. No visits recorded in this period yet.');
+      report.hidden = false;
+    } catch (err) {
+      status.textContent = err.message || 'Visitor report unavailable. Please try again.';
+    } finally { button.disabled = false; }
+  });
 
   let cnrCandidates = [];
 
