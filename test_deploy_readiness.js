@@ -75,6 +75,45 @@ for (const f of fs.readdirSync(path.join(ROOT, "lib")).filter((x) => x.endsWith(
   }
 }
 
+// The deployment build itself must reject broken source, not just this optional smoke test.
+{
+  const { spawnSync } = require("child_process");
+  const tmp = fs.mkdtempSync(path.join(require("os").tmpdir(), "ntp-build-check-"));
+  try {
+    for (const dir of ["scripts", "vendor", "api", "lib"]) {
+      fs.cpSync(path.join(ROOT, dir), path.join(tmp, dir), { recursive: true });
+    }
+    const runBuild = () => spawnSync(process.execPath, ["scripts/generate-assets.js"], {
+      cwd: tmp, encoding: "utf8", timeout: 30000,
+    });
+    const output = path.join(tmp, "lib/assets.generated.js");
+    const cases = [
+      ["vendor/dashboard_js_full.txt", "\n# Data privacy consent\n"],
+      ["vendor/ntp_pipeline_browser.js", "\nconst broken = ];\n"],
+      ["lib/provinceTemplate.js", "\nconst broken = ];\n"],
+      ["api/index.js", "\nconst broken = ];\n"],
+    ];
+    for (const [file, invalid] of cases) {
+      const target = path.join(tmp, file);
+      const original = fs.readFileSync(target, "utf8");
+      fs.writeFileSync(output, "previous build output");
+      fs.appendFileSync(target, invalid);
+      const result = runBuild();
+      check(`build rejects syntax errors in ${file} before writing assets`,
+        result.status !== null && result.status !== 0 &&
+        result.stderr.includes(file) && result.stderr.includes("SyntaxError") &&
+        fs.readFileSync(output, "utf8") === "previous build output",
+        result.error ? result.error.message : result.stderr);
+      fs.writeFileSync(target, original);
+    }
+    const valid = runBuild();
+    check("build accepts valid browser and server source", valid.status === 0,
+      valid.error ? valid.error.message : valid.stderr);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
 // ---------------------------------------------------------------- 5. no bundled data remains
 {
   check("no bundled KPI dataset ships with the app",
