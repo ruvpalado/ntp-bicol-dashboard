@@ -128,6 +128,18 @@ const cookie = () => `${auth.SESSION_COOKIE}=${auth.createSessionToken("master")
   assert(tracked.includes("fetch('/api/traffic'"));
   assert(tracked.includes("navigator.globalPrivacyControl"));
 
+  // Populated dashboard scripts include popup HTML with an embedded </body>. Insertion must
+  // preserve those script strings; checking only the awaiting-uploads page misses this collision.
+  const { buildDashboardHtml } = require("./lib/buildDashboardHtml");
+  const fullHtml = buildDashboardHtml({ meta: {}, nodes: {}, geo: {} }, {}, {});
+  const fullDom = new JSDOM(store.withVisitorTracking(fullHtml));
+  const vm = require("node:vm");
+  const inlineScripts = [...fullDom.window.document.querySelectorAll('script:not([src])')];
+  assert.equal(inlineScripts.length, 2);
+  for (const script of inlineScripts) new vm.Script(script.textContent);
+  assert(inlineScripts[1].textContent.includes("fetch('/api/traffic'"));
+  fullDom.window.close();
+
   // Exercise the actual inline admin script, panel navigation, rendering and error recovery.
   r = res(); await admin(req("GET", { cookie: cookie() }), r); assert.equal(r.code, 200);
   const dom = new JSDOM(r.body, { url: "https://example.test/admin", runScripts: "outside-only" });
