@@ -89,8 +89,6 @@ const MODULES = [
   {key:"screening", label:"Screening & Presumptive"},
   {key:"lab", label:"Laboratory"}, {key:"target", label:"Target vs Accomplishment"},
   {key:"pict", label:"PICT Examination"},
-  {key:"ntpnetwork", label:"NTP Network"},
-  
   {key:"awards", label:"Awardee Recognition"},
 ];
 const LAB_SUBS = [
