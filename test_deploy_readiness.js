@@ -152,6 +152,24 @@ for (const f of fs.readdirSync(path.join(ROOT, "lib")).filter((x) => x.endsWith(
         // that never sets one behaves exactly as it did while gating was removed.
         check("built page's renderAwards has the activation-gating 'Coming Soon' path reachable again",
           /isAwardsActiveForCurrentPage\(\)\)\{\s*el\.innerHTML\s*=\s*renderAwardsComingSoon/.test(html));
+        // Exercise the served upload-visibility logic for production aliases and non-live copies.
+        const uploadVisibility = html.slice(html.indexOf("const LIVE_PRODUCTION_HOST ="), html.indexOf('const tb = document.getElementById("tabbar")'));
+        for (const [hostname, hidden] of [
+          ["dashboardntpbicol.vercel.app", true],
+          ["ntp-bicol-dashboard.vercel.app", true],
+          ["ntp-bicol-dashboard-3cwhvv9tw-ruvpalados-projects.vercel.app", true],
+          ["ntp-bicol-dashboard-preview.vercel.app", false],
+          ["localhost", false],
+          ["", false],
+        ]) {
+          const uploadBox = { style: {} };
+          require("vm").runInNewContext(uploadVisibility, {
+            window: { location: { hostname } },
+            document: { querySelector: () => uploadBox },
+          });
+          check(`Excel upload ${hidden ? "hidden" : "available"} on ${hostname || "offline copy"}`,
+            (uploadBox.style.display === "none") === hidden);
+        }
         check("built page includes the intro splash image", html.includes('id="introImage"'));
         check("built page has no leftover <video> element", !html.includes("<video"));
         check("built page script tags balance",
