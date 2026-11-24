@@ -314,7 +314,15 @@ function safe(a,b){ return b? Math.round(a/b*1000)/10 : null; }
 function periodData(trend){
   if(!trend) return {labels:[], data:[]};
   if(state.period==="monthly") return {labels:KPI.meta.months, data:trend};
-  return {labels:["Q1 (Jan-Mar)","Q2 (Apr-Jun)"], data:[trend[0]+trend[1]+trend[2], trend[3]+trend[4]+trend[5]]};
+  const quarters = Object.values(KPI.meta.quarters);
+  const data = quarters.map(months=>{
+    const indexes = months.map(m=>KPI.meta.months.indexOf(m));
+    // Older published datasets have only Jan-Jun trends. Keep their missing quarters unknown,
+    // rather than fabricating zeros, until an admin rebuilds the KPI with the full-year pipeline.
+    if(indexes.some(i=>i<0 || trend[i]===undefined)) return null;
+    return indexes.reduce((sum,i)=>sum+trend[i],0);
+  });
+  return {labels:["Q1 (Jan-Mar)","Q2 (Apr-Jun)","Q3 (Jul-Sep)","Q4 (Oct-Dec)"], data};
 }
 
 // Human-readable label for whatever Month/Quarter value is currently selected (or "All ... (Year-to-Date)").
@@ -1656,7 +1664,7 @@ function renderKPIRow(node){
       <div class="kpi-card"><div class="accent" style="background:#2e8b57"></div><div class="kpi-label">Accomplishment of Target</div>
         <div class="kpi-value">${pctS(d.tpt.coverage_pct)}</div><div class="kpi-sub">of annual target</div></div>
       <div class="kpi-card"><div class="accent" style="background:#0f7d8c"></div><div class="kpi-label">Monthly Average</div>
-        <div class="kpi-value">${fmt1(d.tpt.monthly_avg)}</div><div class="kpi-sub">6-month YTD &divide; 6</div></div>
+        <div class="kpi-value">${fmt1(d.tpt.monthly_avg)}</div><div class="kpi-sub">Reporting total &divide; ${KPI.meta.months.length} months</div></div>
     `;
     return;
   }
@@ -2263,7 +2271,7 @@ function renderTSR(d, el){
   const tsrTrendDrtb = d.tsr.tsr_trend_drtb || null;
   const tsrTrendMn = d.tsr.tsr_trend_mn || null;
   // Cure Rate Trend is plotted on the cohort's own real calendar months (trend_by_month, keyed
-  // "YYYY-MM"), not the fixed Jan-Jun 2026 window the rest of the dashboard uses - TSR Cohort
+  // "YYYY-MM"), not the year-blind calendar-month buckets the other modules use - TSR Cohort
   // intentionally carries patients notified in prior years (a DR-TB course can run past a year
   // long), so a type's records routinely predate the current reporting period entirely. Union the
   // months either type actually has data for, sorted chronologically, so both lines share one axis

@@ -171,7 +171,21 @@ Philippine-day boundaries and the admin browser-script regression checks.
 - The standalone `ntp_dashboard_v4.html` in the parent folder remains a self-contained offline copy
   with its own in-browser upload.
 
+## Updating an existing six-month dataset
+
+After deploying the full-year period-filter fix, sign in at `/admin` and re-upload one area's
+**current, unchanged** provincial workbook to its matching upload slot. The normal upload path
+rebuilds the published KPI from all stored province and reference files using the new pipeline.
+Keep the existing files in the other slots; do not delete or replace them with empty templates.
+A redeploy alone does not recalculate `ntp-kpi/current.json`, so its old July–December slices will
+remain empty until this rebuild. Verify the 3rd/4th Quarter selections against the source workbook.
+The TPT Monthly Average now divides the reporting total by the full 12-month calendar rather than
+the old fixed six-month window; it is not an elapsed-month or selected-quarter average.
+
 ## Running the tests
+
+Run `node test_full_year_period_filter.js` for full-year CNR/MN/TPT/TSR/TPT Cohort period filtering,
+including Q3/Q4 dropdown changes and trend chart data in the rendered dashboard.
 
 ```bash
 node test_deploy_readiness.js          # cold-start, routing, auth, empty state
