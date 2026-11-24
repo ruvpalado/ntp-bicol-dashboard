@@ -19,8 +19,9 @@ const isBicolArea = (p) => p !== null && p !== undefined && OPERATIONAL_PROVINCE
 // belong to other provinces and get corrected away by the facility->province reference), so their
 // dropdowns are enabled but will show empty/no-options today - a source-data limitation, not a bug -
 // and will start working automatically once genuine facility-level data for them is uploaded.
-const MONTHS = ["January","February","March","April","May","June"];
 const ALL_MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+// Use the same full-year calendar for date tagging, trends and period slices.
+const MONTHS = ALL_MONTHS;
 const QUARTERS_ALL = {
   Q1: ["January","February","March"], Q2: ["April","May","June"],
   Q3: ["July","August","September"], Q4: ["October","November","December"]
@@ -1529,14 +1530,7 @@ function round0(x) { return x === null || x === undefined || isNaN(x) ? null : M
 function isDateLike(v) { return v instanceof Date && !isNaN(v.getTime()); }
 function monthFromDate(dt) {
   if (!isDateLike(dt)) return null;
-  const m = dt.getMonth() + 1;
-  // Only Jan-Jun map onto a MONTHS bucket - this report's fixed 6-month window. A row dated July-Dec
-  // (of any year) has no bucket in that window and must return null so it's excluded from monthly
-  // trends, exactly like an unparseable date. Previously this fell back to MONTHS[0] ("January"),
-  // which silently merged every July-Dec row into the January bucket instead of leaving it out -
-  // corrupting that month's count for CNR/MN/TPT trends whenever any row fell in the back half of
-  // the year (e.g. real July/August 2026 notifications once the calendar moves past June).
-  return (m >= 1 && m <= 6) ? MONTHS[m - 1] : null;
+  return ALL_MONTHS[dt.getMonth()];
 }
 function coerceDate(v) {
   // Match pandas Timestamp's valid range (~1677-2262) for ANY date, not just string-parsed ones -
@@ -3411,8 +3405,8 @@ function runPipeline(workbook, progressCb) {
       const denomSub = basisBact ? bactTypeSub : typeSub;
       const cureCt = denomSub.filter(r => r["Outcome/Status"] === "CURED").length;
       const totalCt = denomSub.length;
-      // Trend is keyed by the row's real calendar year-month (from _date), not the fixed Jan-Jun 2026
-      // MONTHS window used for CNR/MN/TPT. TSR Cohort intentionally carries patients notified in
+      // Trend is keyed by the row's real calendar year-month (from _date), not the year-blind
+      // calendar-month buckets used for CNR/MN/TPT. TSR Cohort intentionally carries patients notified in
       // prior years - a DR-TB course can run past a year long, so a large share of any cohort was
       // often enrolled well before the current reporting period. Forcing those rows onto a Jan-Jun
       //2026 axis previously did real damage two ways: rows from months 7-12 (of any year) all fell
@@ -3593,7 +3587,7 @@ function runPipeline(workbook, progressCb) {
         referral_by_facility: mnReferralByFacility(mnSub) },
       mn_facility_catchment: mnCatchmentSub ? mnMetrics(mnCatchmentSub, tgt.mn) : null,
       tpt: { enrolled: tptCt, target: tgt.tpt, coverage_pct: tgt.tpt ? safeDiv(tptCt, tgt.tpt, 1) : null,
-        monthly_avg: Math.round(tptCt / 6 * 10) / 10, trend: MONTHS.map(m => tptSub.filter(r => r.Month === m).length),
+        monthly_avg: Math.round(tptCt / MONTHS.length * 10) / 10, trend: MONTHS.map(m => tptSub.filter(r => r.Month === m).length),
         by_regimen: tptCt ? valueCounts(tptSub.map(r => r["TPT Regimen"])) : {},
         by_patient_source: tptCt ? valueCounts(tptSub.map(r => r["Source of Patient"])) : {},
         cohort_total: tptcTot, cohort_completed: tptcComp, cohort_rate: safeDiv(tptcComp, tptcTot, 1),
