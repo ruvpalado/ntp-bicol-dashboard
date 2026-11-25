@@ -19,7 +19,7 @@ const sheets = {
   "MN 2026": [["Province", "City/Municipality", "Screening/Diagnosing Health Facility", "Date of Diagnosis", "Outcome/Status"],
     // Deliberately different from the cohort: these notifications are NOT the TSR denominator.
     ["Albay", "Bacacay", facility, "2026-01-15", "CURED"],
-    ["Albay", "Daraga", secondFacility, "2026-10-15", "DIED"]],
+    ["Albay", "Daraga", secondFacility, "2026-01-15", "DIED"]],
   "TSR  COHORT": [["Province", "City/Municipality", "Treatment Health Facility", "Date of Notification", "Type", "Outcome/Status"],
     ["Albay", "Bacacay", facility, "2026-01-15", "MN", "CURED"],
     ["Albay", "Bacacay", facility, "2026-01-16", "MN", "TREATMENT COMPLETED"],
@@ -72,6 +72,34 @@ function expectCard(rate, detail) {
   assert.equal(card().querySelector(".kpi-value").textContent, rate);
   assert.equal(card().querySelector(".kpi-sub").textContent, detail);
 }
+function expectTable(expected, total) {
+  const table = window.document.getElementById("mnTsrOutcomeTable");
+  assert.ok(table, "MN TSR outcome table exists");
+  const actual = Object.fromEntries([...table.querySelectorAll("tbody tr")].map(row =>
+    [row.cells[0].textContent, Number(row.cells[1].textContent.replaceAll(",", ""))]));
+  assert.deepEqual(actual, expected);
+  assert.equal(Number(table.querySelector("tfoot td").textContent.replaceAll(",", "")), total);
+  assert.equal(Object.values(actual).reduce((a, b) => a + b, 0), total);
+}
+check("MN table sits immediately beside the existing outcome pie", () => {
+  const tablePanel = window.document.getElementById("mnTsrOutcomeTable").closest(".panel");
+  assert.ok(tablePanel.previousElementSibling.querySelector("#c_mnOutcome"));
+});
+check("region table uses MN cohort outcomes and includes unrecorded patients", () =>
+  expectTable({ CURED: 1, "TREATMENT COMPLETED": 1, DIED: 2, "Not Recorded": 1 }, 5));
+check("outcome labels are escaped, not rendered as HTML", () => {
+  const html = window.mnTsrOutcomeTable({ total: 1, outcome_dist: { '<img src=x onerror=alert(1)>': 1 } });
+  const container = window.document.createElement("div");
+  container.innerHTML = html;
+  assert.equal(container.querySelector("img"), null);
+  assert.equal(container.querySelector("tbody td").textContent, '<img src=x onerror=alert(1)>');
+});
+check("blank and missing outcomes reconcile to the cohort total", () => {
+  const container = window.document.createElement("div");
+  container.innerHTML = window.mnTsrOutcomeTable({ total: 4, outcome_dist: { "": 1, "   ": 1, CURED: 1 } });
+  const rows = [...container.querySelectorAll("tbody tr")];
+  assert.equal(rows.find(row => row.cells[0].textContent === "Not Recorded").cells[1].textContent, "3");
+});
 check("MN module retains its five KPIs and adds MN TSR with numerator/denominator", () => {
   assert.equal(window.document.querySelectorAll("#kpiRow .kpi-card").length, 6);
   expectCard("40%", "2 cured + treatment completed / 5 MN patients");
@@ -79,19 +107,38 @@ check("MN module retains its five KPIs and adds MN TSR with numerator/denominato
 select("fPeriod", "quarterly");
 select("fPeriodValue", "Q1");
 check("MN TSR follows quarter selection", () => expectCard("50%", "2 cured + treatment completed / 4 MN patients"));
+check("quarter table excludes other periods", () =>
+  expectTable({ CURED: 1, "TREATMENT COMPLETED": 1, DIED: 1, "Not Recorded": 1 }, 4));
 select("fPeriodValue", "Q4");
 check("MN TSR displays genuine zero success", () => expectCard("0%", "0 cured + treatment completed / 1 MN patients"));
+check("unsuccessful-only period table remains visible without current notifications", () =>
+  expectTable({ DIED: 1 }, 1));
 select("fPeriodValue", "Q2");
 check("MN TSR explains a missing cohort", () => expectCard("n/a", "no cohort rows submitted for this area"));
+check("empty cohort has an honest table empty state", () => {
+  assert.equal(window.document.getElementById("mnTsrOutcomeTable"), null);
+  assert.match(window.document.getElementById("moduleContent").textContent, /No MN TSR cohort records for this scope and period/);
+});
 select("fPeriod", "monthly");
 select("fPeriodValue", "January");
 check("MN TSR follows month selection", () => expectCard("50%", "2 cured + treatment completed / 4 MN patients"));
+check("month table uses the same filtered patients as the KPI", () =>
+  expectTable({ CURED: 1, "TREATMENT COMPLETED": 1, DIED: 1, "Not Recorded": 1 }, 4));
 select("fPeriodValue", "ALL");
 select("fProvince", "ALBAY");
 check("MN TSR follows province selection", () => expectCard("40%", "2 cured + treatment completed / 5 MN patients"));
+check("no selected facility shows province-wide outcome counts", () =>
+  expectTable({ CURED: 1, "TREATMENT COMPLETED": 1, DIED: 2, "Not Recorded": 1 }, 5));
 select("fFacility", facility);
 check("MN TSR follows facility selection", () => expectCard("50%", "2 cured + treatment completed / 4 MN patients"));
+check("selected facility excludes patients treated at other facilities", () =>
+  expectTable({ CURED: 1, "TREATMENT COMPLETED": 1, DIED: 1, "Not Recorded": 1 }, 4));
+select("fFacility", "ALL");
+check("clearing the facility restores province outcomes", () =>
+  expectTable({ CURED: 1, "TREATMENT COMPLETED": 1, DIED: 2, "Not Recorded": 1 }, 5));
 window.document.querySelector('[data-m="tsr"]').click();
+check("new outcome table appears only in the MN module", () =>
+  assert.equal(window.document.getElementById("mnTsrOutcomeTable"), null));
 check("existing TSR module remains unchanged", () => {
   assert.equal(window.document.querySelectorAll("#kpiRow .kpi-card").length, 4);
   // Switching from MN to the public-facility TSR roster resets the facility filter.

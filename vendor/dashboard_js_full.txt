@@ -2430,13 +2430,36 @@ function renderTSR(d, el){
   }
 }
 
+function mnTsrOutcomeTable(block){
+  if(!block.total) return noData("No MN TSR cohort records for this scope and period.");
+  // valueCounts omits null outcomes; retain those patients so the table reconciles to the KPI.
+  const dist = {};
+  let recorded = 0;
+  for(const [status, count] of Object.entries(block.outcome_dist || {})){
+    const label = status.trim() || "Not Recorded";
+    dist[label] = (dist[label] || 0) + count;
+    recorded += count;
+  }
+  if(recorded < block.total) dist["Not Recorded"] = (dist["Not Recorded"] || 0) + block.total - recorded;
+  const rows = Object.entries(dist).sort(([a], [b])=>a.localeCompare(b)).map(([status, count])=>{
+    const label = document.createElement("span");
+    label.textContent = status;
+    return `<tr><td>${label.innerHTML}</td><td>${fmt(count)}</td></tr>`;
+  }).join("");
+  return `<table id="mnTsrOutcomeTable" aria-label="MN TSR patients by outcome status">
+    <thead><tr><th scope="col">Outcome / Status</th><th scope="col">Patients</th></tr></thead>
+    <tbody>${rows}</tbody><tfoot><tr><th scope="row">Total MN patients</th><td>${fmt(block.total)}</td></tr></tfoot>
+  </table>`;
+}
+
 function renderMN(d, el){
   const pd = periodData(d.mn.trend);
   el.innerHTML = `<div class="section-title"><h2>MN &middot; Private Sector Notification</h2><span class="n">${fmt(d.mn.total)} cases</span></div>
-    ${d.mn.total>0? `<div class="grid2">
-      <div class="panel"><h3>MN Monthly Trend</h3><canvas id="c_mnTrend"></canvas></div>
-      <div class="panel"><h3>Outcome Status</h3><canvas id="c_mnOutcome"></canvas></div>
-    </div>` : noData("No private-sector (MN) notifications for this scope.")}
+    <div class="grid3">
+      <div class="panel"><h3>MN Monthly Trend</h3>${d.mn.total>0? '<canvas id="c_mnTrend"></canvas>' : noData("No private-sector (MN) notifications for this scope.")}</div>
+      <div class="panel"><h3>Outcome Status</h3>${d.mn.total>0? '<canvas id="c_mnOutcome"></canvas>' : noData("No private-sector (MN) notifications for this scope.")}</div>
+      <div class="panel"><h3>MN TSR by Outcome Status</h3><div class="desc">TSR COHORT &middot; MN patients only &middot; selected area/facility and period</div>${mnTsrOutcomeTable(d.tsr.mn)}</div>
+    </div>
     <div class="panel" style="margin-top:14px;"><h3>Referral Status by Facility</h3>${mnReferralByFacilityTable(d.mn.referral_by_facility)}</div>`;
   if(d.mn.total>0){
     mkChart("c_mnTrend", {type:"line", data:{labels:pd.labels, datasets:[{data:pd.data, borderColor:"#e2a336", backgroundColor:"#e2a336", tension:.3, fill:false}]}, options:{plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}}}});
