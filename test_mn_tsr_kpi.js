@@ -21,13 +21,13 @@ const sheets = {
     ["Albay", "Bacacay", facility, "2026-01-15", "CURED"],
     ["Albay", "Daraga", secondFacility, "2026-01-15", "DIED"]],
   "TSR  COHORT": [["Province", "City/Municipality", "Treatment Health Facility", "Date of Notification", "Type", "Outcome/Status"],
-    ["Albay", "Bacacay", facility, "2026-01-15", "MN", "CURED"],
-    ["Albay", "Bacacay", facility, "2026-01-16", "MN", "TREATMENT COMPLETED"],
-    ["Albay", "Bacacay", facility, "2026-01-17", "MN", "DIED"],
-    ["Albay", "Bacacay", facility, "2026-01-18", "MN", null],
-    ["Albay", "Daraga", secondFacility, "2026-10-15", "MN", "DIED"],
-    ["Albay", "Bacacay", facility, "2026-01-15", "DS", "CURED"],
-    ["Albay", "Bacacay", facility, "2026-01-15", "DR", "TREATMENT COMPLETED"]],
+    ["Albay", "Bacacay", facility, "2025-01-15", "MN", "CURED"],
+    ["Albay", "Bacacay", facility, "2025-01-16", "MN", "TREATMENT COMPLETED"],
+    ["Albay", "Bacacay", facility, "2025-01-17", "MN", "DIED"],
+    ["Albay", "Bacacay", facility, "2025-01-18", "MN", null],
+    ["Albay", "Daraga", secondFacility, "2025-10-15", "MN", "DIED"],
+    ["Albay", "Bacacay", facility, "2025-01-15", "DS", "CURED"],
+    ["Albay", "Bacacay", facility, "2025-01-15", "DR", "TREATMENT COMPLETED"]],
 };
 const workbook = { SheetNames: Object.keys(sheets), Sheets: {} };
 for (const [name, grid] of Object.entries(sheets)) workbook.Sheets[name] = XLSX.utils.aoa_to_sheet(grid);
@@ -53,7 +53,8 @@ const browserKpi = { ...kpi, nodes: Object.fromEntries(Object.entries(kpi.nodes)
 })) };
 const dom = new JSDOM(buildDashboardHtml(browserKpi), { runScripts: "outside-only", url: "https://example.test/" });
 const { window } = dom;
-window.Chart = class { destroy() {} };
+const chartConfigs = new Map();
+window.Chart = class { constructor(el, config) { chartConfigs.set(el.id, config); } destroy() {} };
 const inline = [...window.document.scripts].find(script => script.textContent.includes("let KPI ="));
 window.eval(inline.textContent);
 window.document.querySelector('[data-m="mn"]').click();
@@ -81,6 +82,26 @@ function expectTable(expected, total) {
   assert.equal(Number(table.querySelector("tfoot td").textContent.replaceAll(",", "")), total);
   assert.equal(Object.values(actual).reduce((a, b) => a + b, 0), total);
 }
+check("year-specific headings are used", () => {
+  const headings = [...window.document.querySelectorAll("#moduleContent h3")].map(el => el.textContent);
+  assert.ok(headings.includes("2026 MN"));
+  assert.ok(headings.includes("MN 2025"));
+  assert.ok(!headings.includes("Outcome Status"));
+});
+check("2026 pie uses the dedicated 2026 aggregate", () => {
+  const chart = chartConfigs.get("c_mnOutcome");
+  assert.deepEqual(Array.from(chart.data.datasets[0].data), [1, 1]);
+});
+check("legacy saved aggregates are not mislabeled as 2026", () => {
+  const node = window.eval("currentNode().node");
+  const old = node.mn.outcomes_2026;
+  delete node.mn.outcomes_2026;
+  window.renderMN(node, window.document.getElementById("moduleContent"));
+  assert.equal(window.document.getElementById("c_mnOutcome"), null);
+  assert.match(window.document.getElementById("moduleContent").textContent, /refresh the year-specific MN chart data/);
+  node.mn.outcomes_2026 = old;
+  window.renderMN(node, window.document.getElementById("moduleContent"));
+});
 check("MN table sits immediately beside the existing outcome pie", () => {
   const tablePanel = window.document.getElementById("mnTsrOutcomeTable").closest(".panel");
   assert.ok(tablePanel.previousElementSibling.querySelector("#c_mnOutcome"));
@@ -117,7 +138,7 @@ select("fPeriodValue", "Q2");
 check("MN TSR explains a missing cohort", () => expectCard("n/a", "no cohort rows submitted for this area"));
 check("empty cohort has an honest table empty state", () => {
   assert.equal(window.document.getElementById("mnTsrOutcomeTable"), null);
-  assert.match(window.document.getElementById("moduleContent").textContent, /No MN TSR cohort records for this scope and period/);
+  assert.match(window.document.getElementById("moduleContent").textContent, /No MN 2025 cohort records for this scope and period/);
 });
 select("fPeriod", "monthly");
 select("fPeriodValue", "January");
@@ -145,6 +166,34 @@ check("existing TSR module remains unchanged", () => {
   expectCard("40%", "5 cohort");
 });
 dom.window.close();
+// Recompute with deliberately mixed years and an undated patient to prove strict year isolation.
+sheets["MN 2026"].push(
+  ["Albay", "Bacacay", facility, "2025-01-15", "DIED"],
+  ["Albay", "Bacacay", facility, "2027-01-15", "DIED"],
+  ["Albay", "Bacacay", facility, null, "DIED"],
+  ["Albay", "Bacacay", facility, "2026-01-15", null]);
+sheets["TSR  COHORT"].push(
+  ["Albay", "Bacacay", facility, "2024-01-15", "MN", "CURED"],
+  ["Albay", "Bacacay", facility, "2026-01-15", "MN", "CURED"],
+  ["Albay", "Bacacay", facility, null, "MN", "CURED"]);
+for (const [name, grid] of Object.entries(sheets)) workbook.Sheets[name] = XLSX.utils.aoa_to_sheet(grid);
+const mixed = runPipelineOnWorkbook(workbook);
+check("2026 pie excludes 2025, 2027 and undated patients, retaining missing outcomes", () => {
+  assert.deepEqual(mixed.nodes.REGION.mn.outcomes_2026,
+    { total: 3, outcome_dist: { CURED: 1, DIED: 1, "Not Recorded": 1 } });
+  assert.equal(mixed.nodes.REGION.by_quarter.Q1.mn.outcomes_2026.total, 3);
+});
+check("2025 table excludes DS/DR, other years and undated patients", () => {
+  const block = window.mn2025Cohort(mixed.nodes.REGION);
+  assert.equal(block.total, 5);
+  assert.equal(block.outcome_dist.CURED, 1);
+});
+check("2025 table keeps facility and quarter isolation with mixed-year data", () => {
+  const node = mixed.nodes[`F|ALBAY|BACACAY|${facility}`].by_quarter.Q1;
+  assert.equal(window.mn2025Cohort(node).total, 4);
+  assert.equal(node.mn.outcomes_2026.total, 2);
+});
+
 
 for (const [name, ok, detail] of results) console.log(`${ok ? "PASS" : "FAIL"} - ${name}${ok ? "" : "\n  " + detail}`);
 console.log(`\nTOTAL: ${results.filter(r => r[1]).length}/${results.length} passed`);

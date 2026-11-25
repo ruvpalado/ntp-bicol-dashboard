@@ -55,6 +55,20 @@ falls back to whichever provincial file supplies it. The Population slot reads b
 - `vercel.json` — routes `/`, `/login`, `/admin`, `/logout`, `/signup`, `/forgot-password`,
   `/reset-password` to their handlers
 
+## MN outcome years
+
+In the MN module, **2026 MN** is the outcome pie for rows in `MN 2026` whose
+**Date of Diagnosis** is in 2026. **MN 2025** is the outcome-count table for
+`Type = MN` rows in `TSR COHORT` whose **Date of Notification** is in 2025.
+Both follow the selected province, facility, and month/quarter; unknown dates are
+excluded from these year-specific panels. Missing outcomes count as **Not Recorded**.
+The existing TSR KPI and other MN metrics keep their existing definitions.
+
+Saved KPI datasets published before the year-specific pie was added must be
+recomputed: after deploying, re-upload an existing provincial workbook through
+`/admin` to reconsolidate all saved areas with the updated pipeline. Until then,
+the pie shows a refresh notice rather than labeling an all-year total as 2026.
+
 ## Admin-only dashboard visitors
 
 In `/admin`, choose **Dashboard Visitors**, then **Load / refresh report**. The report shows
