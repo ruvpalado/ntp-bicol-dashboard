@@ -3468,6 +3468,11 @@ function runPipeline(workbook, progressCb) {
     // per instruction) has a real per-month series for all three types rather than omitting MN.
     const tsrTrendMn = successTrend(tsrSub.filter(r => r.Type === "MN"));
 
+    const mn2026Rows = mnSub.filter(r => r._date && r._date.getFullYear() === 2026);
+    const mn2026Outcomes = valueCounts(mn2026Rows.map(r => {
+      const status = r["Outcome/Status"];
+      return status == null || !String(status).trim() ? "Not Recorded" : String(status).trim();
+    }));
     const mnReferred = mnSub.filter(r => r["Referred to DOTS"] === "Y").length;
     const mnFacilityCt = mnFacilityCount(mnSub);
     const mnReferralStatusDistMain = mnReferralStatusDist(mnSub);
@@ -3581,6 +3586,7 @@ function runPipeline(workbook, progressCb) {
       },
       tsr: { dstb: tsrDs, drtb: tsrDr, mn: tsrMn, all: tsrAll, cure_dstb: cureDstb, cure_drtb: cureDrtb, tsr_trend_dstb: tsrTrendDstb, tsr_trend_drtb: tsrTrendDrtb, tsr_trend_mn: tsrTrendMn },
       mn: { total: mnCt, referred: mnReferred,
+        outcomes_2026: { total: mn2026Rows.length, outcome_dist: mn2026Outcomes },
         trend: trendMn, target: tgt.mn, coverage_pct: tgt.mn ? safeDiv(mnCt, tgt.mn, 1) : null,
         outcome_dist: mnCt ? valueCounts(mnSub.map(r => r["Outcome/Status"])) : {},
         facility_count: mnFacilityCt, referral_status_dist: mnReferralStatusDistMain,

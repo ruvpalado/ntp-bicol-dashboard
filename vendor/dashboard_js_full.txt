@@ -1639,7 +1639,10 @@ function renderKPIRow(node){
     return;
   }
   if(state.module==="mn"){
-    el.style.gridTemplateColumns = "repeat(5,1fr)";
+    el.style.gridTemplateColumns = "repeat(6,1fr)";
+    // MN is its own cohort Type, alongside DS and DR; do not divide by MN notifications.
+    const mnTsr = d.tsr.mn;
+    const mnTsrColor = accColor(mnTsr.rate);
     el.innerHTML = `
       <div class="kpi-card"><div class="accent" style="background:#e2a336"></div><div class="kpi-label">MN Cases</div>
         <div class="kpi-value">${fmt(d.mn.total)}</div><div class="kpi-sub">private-sector notified</div></div>
@@ -1651,6 +1654,8 @@ function renderKPIRow(node){
         <div class="kpi-value">${fmt(d.mn.target)}</div><div class="kpi-sub">Case Notified &times; 30%</div></div>
       <div class="kpi-card"><div class="accent" style="background:#2e8b57"></div><div class="kpi-label">Accomplishment of Target</div>
         <div class="kpi-value">${fmt(d.mn.total)} of ${fmt(d.mn.target)}</div><div class="kpi-sub">${pctS(d.mn.coverage_pct)} of annual target</div></div>
+      <div class="kpi-card"><div class="accent" style="background:${mnTsrColor}"></div><div class="kpi-label">TSR &mdash; MN</div>
+        <div class="kpi-value" style="color:${mnTsrColor}">${pctS(mnTsr.rate)}</div><div class="kpi-sub">${mnTsr.total ? `${fmt(mnTsr.success)} cured + treatment completed / ${fmt(mnTsr.total)} MN patients` : tsrSub(mnTsr, null)}</div></div>
     `;
     return;
   }
@@ -2425,17 +2430,56 @@ function renderTSR(d, el){
   }
 }
 
+function mn2025Cohort(d){
+  // Existing published datasets already carry year distributions and dated monthly totals.
+  // Use both: distributions alone omit blank outcomes and would undercount the cohort.
+  const trend = d.tsr.tsr_trend_mn && d.tsr.tsr_trend_mn.trend_by_month;
+  const byYear = d.tsr.mn.outcome_dist_by_year;
+  if(!trend || !byYear) return null;
+  const total = Object.entries(trend).filter(([month])=>month.startsWith("2025-"))
+    .reduce((sum, [, counts])=>sum + counts.total, 0);
+  return { total, outcome_dist: byYear["2025"] || {} };
+}
+
+function mnTsrOutcomeTable(block){
+  if(!block) return noData("Re-upload a provincial file to refresh the year-specific MN cohort data.");
+  if(!block.total) return noData("No MN 2025 cohort records for this scope and period.");
+  // valueCounts omits null outcomes; retain those patients in the selected 2025 cohort total.
+  const dist = {};
+  let recorded = 0;
+  for(const [status, count] of Object.entries(block.outcome_dist || {})){
+    const label = status.trim() || "Not Recorded";
+    dist[label] = (dist[label] || 0) + count;
+    recorded += count;
+  }
+  if(recorded < block.total) dist["Not Recorded"] = (dist["Not Recorded"] || 0) + block.total - recorded;
+  const rows = Object.entries(dist).sort(([a], [b])=>a.localeCompare(b)).map(([status, count])=>{
+    const label = document.createElement("span");
+    label.textContent = status;
+    return `<tr><td>${label.innerHTML}</td><td>${fmt(count)}</td></tr>`;
+  }).join("");
+  return `<table id="mnTsrOutcomeTable" aria-label="MN 2025 patients by outcome status">
+    <thead><tr><th scope="col">Outcome / Status</th><th scope="col">Patients</th></tr></thead>
+    <tbody>${rows}</tbody><tfoot><tr><th scope="row">Total MN patients</th><td>${fmt(block.total)}</td></tr></tfoot>
+  </table>`;
+}
+
 function renderMN(d, el){
   const pd = periodData(d.mn.trend);
+  // Never relabel an all-year aggregate as 2026 when the saved dataset predates this field.
+  const mn2026 = d.mn.outcomes_2026;
   el.innerHTML = `<div class="section-title"><h2>MN &middot; Private Sector Notification</h2><span class="n">${fmt(d.mn.total)} cases</span></div>
-    ${d.mn.total>0? `<div class="grid2">
-      <div class="panel"><h3>MN Monthly Trend</h3><canvas id="c_mnTrend"></canvas></div>
-      <div class="panel"><h3>Outcome Status</h3><canvas id="c_mnOutcome"></canvas></div>
-    </div>` : noData("No private-sector (MN) notifications for this scope.")}
+    <div class="grid3">
+      <div class="panel"><h3>MN Monthly Trend</h3>${d.mn.total>0? '<canvas id="c_mnTrend"></canvas>' : noData("No private-sector (MN) notifications for this scope.")}</div>
+      <div class="panel"><h3>2026 MN</h3><div class="desc">MN 2026 sheet &middot; Date of Diagnosis in 2026</div>${!mn2026 ? noData("Re-upload a provincial file to refresh the year-specific MN chart data.") : mn2026.total>0 ? '<canvas id="c_mnOutcome"></canvas>' : noData("No MN 2026 patients for this scope and period.")}</div>
+      <div class="panel"><h3>MN 2025</h3><div class="desc">TSR COHORT &middot; Type MN &middot; Date of Notification in 2025</div>${mnTsrOutcomeTable(mn2025Cohort(d))}</div>
+    </div>
     <div class="panel" style="margin-top:14px;"><h3>Referral Status by Facility</h3>${mnReferralByFacilityTable(d.mn.referral_by_facility)}</div>`;
   if(d.mn.total>0){
     mkChart("c_mnTrend", {type:"line", data:{labels:pd.labels, datasets:[{data:pd.data, borderColor:"#e2a336", backgroundColor:"#e2a336", tension:.3, fill:false}]}, options:{plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}}}});
-    mkChart("c_mnOutcome", {type:"doughnut", data:{labels:Object.keys(d.mn.outcome_dist), datasets:[{data:Object.values(d.mn.outcome_dist), backgroundColor:barColors(Object.keys(d.mn.outcome_dist).length)}]}, options:{plugins:{legend:{position:"bottom",labels:{boxWidth:10,font:{size:10}}}}}});
+  }
+  if(mn2026 && mn2026.total>0){
+    mkChart("c_mnOutcome", {type:"doughnut", data:{labels:Object.keys(mn2026.outcome_dist), datasets:[{data:Object.values(mn2026.outcome_dist), backgroundColor:barColors(Object.keys(mn2026.outcome_dist).length)}]}, options:{plugins:{legend:{position:"bottom",labels:{boxWidth:10,font:{size:10}}}}}});
   }
 }
 
