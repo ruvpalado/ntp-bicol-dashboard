@@ -1639,7 +1639,10 @@ function renderKPIRow(node){
     return;
   }
   if(state.module==="mn"){
-    el.style.gridTemplateColumns = "repeat(5,1fr)";
+    el.style.gridTemplateColumns = "repeat(6,1fr)";
+    // MN is its own cohort Type, alongside DS and DR; do not divide by MN notifications.
+    const mnTsr = d.tsr.mn;
+    const mnTsrColor = accColor(mnTsr.rate);
     el.innerHTML = `
       <div class="kpi-card"><div class="accent" style="background:#e2a336"></div><div class="kpi-label">MN Cases</div>
         <div class="kpi-value">${fmt(d.mn.total)}</div><div class="kpi-sub">private-sector notified</div></div>
@@ -1651,6 +1654,8 @@ function renderKPIRow(node){
         <div class="kpi-value">${fmt(d.mn.target)}</div><div class="kpi-sub">Case Notified &times; 30%</div></div>
       <div class="kpi-card"><div class="accent" style="background:#2e8b57"></div><div class="kpi-label">Accomplishment of Target</div>
         <div class="kpi-value">${fmt(d.mn.total)} of ${fmt(d.mn.target)}</div><div class="kpi-sub">${pctS(d.mn.coverage_pct)} of annual target</div></div>
+      <div class="kpi-card"><div class="accent" style="background:${mnTsrColor}"></div><div class="kpi-label">TSR &mdash; MN</div>
+        <div class="kpi-value" style="color:${mnTsrColor}">${pctS(mnTsr.rate)}</div><div class="kpi-sub">${mnTsr.total ? `${fmt(mnTsr.success)} cured + treatment completed / ${fmt(mnTsr.total)} MN patients` : tsrSub(mnTsr, null)}</div></div>
     `;
     return;
   }
