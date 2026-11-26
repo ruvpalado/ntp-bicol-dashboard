@@ -170,6 +170,9 @@ for (const f of fs.readdirSync(path.join(ROOT, "lib")).filter((x) => x.endsWith(
       check("dashboard HTML builds from a consolidated dataset", !e2, e2 && e2.message);
       if (html) {
         check("built page has no unreplaced data placeholder", !html.includes("__DATA_JSON__"));
+        check("public page omits the server-only workbook pipeline", !html.includes("NTP_PIPELINE"));
+        check("public page omits the removed browser upload handler", !html.includes("loadNewKPI") && !html.includes('getElementById("xlsxUpload")'));
+        check("public page omits unused upload status styling", !html.includes(".upload-status"));
         // Parsing the generated module alone misses syntax errors inside its browser-script strings.
         const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
         let scriptError = null;
