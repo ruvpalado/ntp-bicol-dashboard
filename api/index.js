@@ -11,7 +11,7 @@ const { getCurrentKpi } = require("../lib/kpiStore");
 const { getCurrentAwards, getActivationDates } = require("../lib/awardsStore");
 const { buildDashboardHtml } = require("../lib/buildDashboardHtml");
 const { PROVINCE_SLOTS } = require("../lib/provinceTemplate");
-const { getAllProvinceEntries, getAllReferenceEntries, blobConfigured } = require("../lib/provinceStore");
+const { getAllProvinceEntries, blobConfigured } = require("../lib/provinceStore");
 
 function awaitingUploadsHtml(outstanding, storageMissing) {
   const list = outstanding.length
@@ -123,66 +123,7 @@ module.exports = async (req, res) => {
       return;
     }
 
-    const [{ awards }, activation, referenceEntries] = await Promise.all([getCurrentAwards(), getActivationDates(), getAllReferenceEntries()]);
-    try {
-      const ntpNet = referenceEntries && referenceEntries.NTP_NETWORK;
-      if (ntpNet && ntpNet.sheets) {
-        const parseRows = (sheet) => {
-          if (!sheet || !sheet.grid) return [];
-          const hr = typeof sheet.headerRows === "number" ? sheet.headerRows : 1;
-          const grid = sheet.grid.slice(hr);
-          const headerRows = sheet.grid.slice(0, hr);
-          const headers = [];
-          const used = new Set();
-          for (let i=0; i < (headerRows[0]||[]).length; i++) {
-            let h = '';
-            for (let r=0; r<headerRows.length; r++) {
-              const val = headerRows[r] && headerRows[r][i];
-              if (val !== undefined && val !== null && String(val).trim()) {
-                h = String(val).trim();
-                break;
-              }
-            }
-            if (!h) { headers.push(''); continue; }
-            if (used.has(h)) {
-              let c = 2;
-              let nh = h + '_' + c;
-              while (used.has(nh)) { c++; nh = h + '_' + c; }
-              h = nh;
-            }
-            used.add(h);
-            headers.push(h);
-          }
-          const rows = [];
-          for (const r of grid) {
-            if (!r) continue;
-            const obj = {};
-            let has = false;
-            for (let i=0;i<headers.length;i++) {
-              if (!headers[i]) continue;
-              const v = r[i] === undefined || r[i] === null ? '' : String(r[i]).trim();
-              if (v) has = true;
-              obj[headers[i]] = v;
-            }
-            if (has) rows.push(obj);
-          }
-          return rows;
-        };
-        const net = {};
-        if (ntpNet.sheets.TBTS) net.tbts = parseRows(ntpNet.sheets.TBTS);
-        if (ntpNet.sheets["ITIS PA"]) net.itis_pa = parseRows(ntpNet.sheets["ITIS PA"]);
-        if (ntpNet.sheets.PHO) net.pho = parseRows(ntpNet.sheets.PHO);
-        net.provinces = {};
-        const provKeys = ["ALBAY","CAM SUR","CAMARINES SUR","CAM NORTE","CAMARINES NORTE","CATANDUANES","MASBATE","SORSOGON"];
-        for (const k of ["ALBAY","CAM SUR","CAM NORTE","CATANDUANES","MASBATE","SORSOGON"]) {
-          if (ntpNet.sheets[k]) {
-            const rows = parseRows(ntpNet.sheets[k]);
-            if (rows.length) net.provinces[k==="CAM SUR"?"CAMARINES SUR":k==="CAM NORTE"?"CAMARINES NORTE":k] = rows;
-          }
-        }
-        if (kpi && kpi.meta) kpi.meta.ntp_network = net;
-      }
-    } catch (e) { /* ignore */ }
+    const [{ awards }, activation] = await Promise.all([getCurrentAwards(), getActivationDates()]);
     const html = buildDashboardHtml(kpi, awards, activation);
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "no-store");

@@ -69,6 +69,17 @@ recomputed: after deploying, re-upload an existing provincial workbook through
 `/admin` to reconsolidate all saved areas with the updated pipeline. Until then,
 the pie shows a refresh notice rather than labeling an all-year total as 2026.
 
+## Retired NTP Network
+
+NTP Network is no longer available in the public dashboard or admin reference uploads.
+Its former coordinator endpoints return HTTP 410 and cannot read or create records.
+Legacy `meta.ntp_network` directory data is excluded when rendering saved KPI snapshots.
+This code change does not erase existing Blob objects; permanent storage cleanup is a separate
+operation limited to the retired directory and coordinator records, never the province, population,
+facility-list, KPI, account, awards or visitor datasets.
+
+Run `node test_coordinator_workflow.js` to check the retired routes and directory exclusion.
+
 ## Admin-only dashboard visitors
 
 In `/admin`, choose **Dashboard Visitors**, then **Load / refresh report**. The report shows
