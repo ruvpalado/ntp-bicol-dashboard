@@ -69,9 +69,15 @@ recomputed: after deploying, re-upload an existing provincial workbook through
 `/admin` to reconsolidate all saved areas with the updated pipeline. Until then,
 the pie shows a refresh notice rather than labeling an all-year total as 2026.
 
+## Bicol NTP Network
+
+Below Awardee Recognition, **Bicol NTP Network** provides two empty submodules:
+**NTP Network** and **Request Facility Data**. These are placeholders only: no directory is
+loaded, no old data is restored, and request submissions are not enabled.
+
 ## Retired NTP Network
 
-NTP Network is no longer available in the public dashboard or admin reference uploads.
+The former data-backed NTP Network is no longer available in the public dashboard or admin reference uploads.
 Its former coordinator endpoints return HTTP 410 and cannot read or create records.
 Legacy `meta.ntp_network` directory data is excluded when rendering saved KPI snapshots.
 This code change does not erase existing Blob objects; permanent storage cleanup is a separate

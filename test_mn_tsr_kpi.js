@@ -57,6 +57,26 @@ const chartConfigs = new Map();
 window.Chart = class { constructor(el, config) { chartConfigs.set(el.id, config); } destroy() {} };
 const inline = [...window.document.scripts].find(script => script.textContent.includes("let KPI ="));
 window.eval(inline.textContent);
+check("empty Bicol NTP Network appears after awards with two independent submodules", () => {
+  const button = window.document.querySelector('[data-m="bicolnetwork"]');
+  assert.equal(button.previousElementSibling.dataset.m, "awards");
+  const requests = [];
+  window.fetch = (...args) => { requests.push(args); throw new Error("Empty module must not fetch data"); };
+  button.click();
+  const content = window.document.getElementById("moduleContent");
+  assert.equal(content.querySelector("h2").textContent, "Bicol NTP Network");
+  assert.deepEqual([...content.querySelectorAll("[data-network-sub]")].map(el=>el.textContent), ["NTP Network", "Request Facility Data"]);
+  assert.match(content.textContent, /No NTP Network data added yet/);
+  assert.equal(window.document.getElementById("kpiRow").style.display, "none");
+  content.querySelector('[data-network-sub="request"]').click();
+  assert.equal(content.querySelector("h3").textContent, "Request Facility Data");
+  assert.match(content.textContent, /submissions are not enabled/);
+  assert.equal(content.querySelector('[data-network-sub="request"]').getAttribute("aria-pressed"), "true");
+  assert.equal(content.querySelector("form, table, canvas, input"), null);
+  content.querySelector('[data-network-sub="network"]').click();
+  assert.equal(content.querySelector("h3").textContent, "NTP Network");
+  assert.equal(requests.length, 0);
+});
 window.document.querySelector('[data-m="mn"]').click();
 function select(id, value) {
   const el = window.document.getElementById(id);
