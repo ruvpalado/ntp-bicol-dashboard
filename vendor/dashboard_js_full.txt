@@ -90,6 +90,11 @@ const MODULES = [
   {key:"lab", label:"Laboratory"}, {key:"target", label:"Target vs Accomplishment"},
   {key:"pict", label:"PICT Examination"},
   {key:"awards", label:"Awardee Recognition"},
+  {key:"bicolnetwork", label:"Bicol NTP Network"},
+];
+const BICOL_NETWORK_SUBS = [
+  {key:"network", label:"NTP Network"},
+  {key:"request", label:"Request Facility Data"},
 ];
 const LAB_SUBS = [
   {key:"genxpert_exam", label:"GenXpert Examination"}, {key:"dssm", label:"DSSM Examination"},
@@ -101,7 +106,7 @@ const LAB_SUBS = [
 // toggle button is clicked - see the #mapToggleBtn wiring near the bottom of this file and the early
 // return at the top of renderMap() below.
 
-let state = { page:"REGION", province:null, muni:"ALL", facility:"ALL", module:"cnr", labSub:"summary", period:"monthly", periodValue:"ALL", mapOpen:false };
+let state = { page:"REGION", province:null, muni:"ALL", facility:"ALL", module:"cnr", networkSub:"network", labSub:"summary", period:"monthly", periodValue:"ALL", mapOpen:false };
 
 // --- Awardee Recognition: category config + data-computed standings -----------------------------
 // New module (per spec: "Develop a new module to recognize awardees across key performance
@@ -1481,7 +1486,7 @@ function renderDataAnalysis(d){
   const el = document.getElementById("daList");
   // Awardee Recognition is a self-contained board (own official/standings panels), not a metric
   // module with a target/gap narrative - hide the generic Data Analysis panel while it's active.
-  if(state.module==="awards"){ daSection.style.display = "none"; return; }
+  if(state.module==="awards" || state.module==="bicolnetwork"){ daSection.style.display = "none"; return; }
   if(!d){ daSection.style.display = "none"; return; }
   daSection.style.display = "";
   const t = d.target_vs_actual || {};
@@ -1590,7 +1595,7 @@ function renderKPIRow(node){
   const d = node;
   const el = document.getElementById("kpiRow");
   // Awardee Recognition renders its own board inside #moduleContent - no generic KPI headline row.
-  if(state.module==="awards"){ el.style.display = "none"; return; }
+  if(state.module==="awards" || state.module==="bicolnetwork"){ el.style.display = "none"; return; }
   el.style.display = "";
   if(!d){ el.innerHTML = noData("No data available for this selection."); return; }
 
@@ -2052,10 +2057,23 @@ function renderAwards(el){
   });
 }
 
+// Empty, independent placeholders: do not fetch retired directory or request APIs.
+function renderBicolNetwork(el){
+  const active = BICOL_NETWORK_SUBS.find(sub=>sub.key===state.networkSub) || BICOL_NETWORK_SUBS[0];
+  el.innerHTML = `<div class="section-title"><h2>Bicol NTP Network</h2></div>
+    <div class="subtabs" id="bicolNetworkSubtabs" role="group" aria-label="Bicol NTP Network submodules">${BICOL_NETWORK_SUBS.map(sub=>`<button type="button" data-network-sub="${sub.key}" class="${active.key===sub.key?'active':''}" aria-pressed="${active.key===sub.key}">${sub.label}</button>`).join("")}</div>
+    <div class="panel"><h3>${active.label}</h3>${noData(active.key==="network" ? "No NTP Network data added yet." : "No facility data requests yet. Request submissions are not enabled.")}</div>`;
+  el.querySelectorAll("[data-network-sub]").forEach(button=>button.addEventListener("click", ()=>{
+    state.networkSub = button.dataset.networkSub;
+    renderBicolNetwork(el);
+  }));
+}
+
 function renderModule(){
   const {node:d} = currentNode();
   const el = document.getElementById("moduleContent");
   if(state.module==="awards"){ renderAwards(el); return; }
+  if(state.module==="bicolnetwork"){ renderBicolNetwork(el); return; }
   if(!d){ el.innerHTML = noData("No data for this selection."); return; }
   if(state.module==="cnr") renderCNR(d, el);
   else if(state.module==="tsr") renderTSR(d, el);
