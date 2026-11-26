@@ -2470,13 +2470,13 @@ function renderMN(d, el){
   const mn2026 = d.mn.outcomes_2026;
   el.innerHTML = `<div class="section-title"><h2>MN &middot; Private Sector Notification</h2><span class="n">${fmt(d.mn.total)} cases</span></div>
     <div class="grid3">
-      <div class="panel"><h3>MN Monthly Trend</h3>${d.mn.total>0? '<canvas id="c_mnTrend"></canvas>' : noData("No private-sector (MN) notifications for this scope.")}</div>
+      <div class="panel panel-fill"><h3>MN Monthly Trend</h3>${d.mn.total>0? '<div class="chart-fill-wrap"><canvas id="c_mnTrend"></canvas></div>' : noData("No private-sector (MN) notifications for this scope.")}</div>
       <div class="panel"><h3>2026 MN</h3><div class="desc">MN 2026 sheet &middot; Date of Diagnosis in 2026</div>${!mn2026 ? noData("Re-upload a provincial file to refresh the year-specific MN chart data.") : mn2026.total>0 ? '<canvas id="c_mnOutcome"></canvas>' : noData("No MN 2026 patients for this scope and period.")}</div>
       <div class="panel"><h3>MN 2025</h3><div class="desc">TSR COHORT &middot; Type MN &middot; Date of Notification in 2025</div>${mnTsrOutcomeTable(mn2025Cohort(d))}</div>
     </div>
     <div class="panel" style="margin-top:14px;"><h3>Referral Status by Facility</h3>${mnReferralByFacilityTable(d.mn.referral_by_facility)}</div>`;
   if(d.mn.total>0){
-    mkChart("c_mnTrend", {type:"line", data:{labels:pd.labels, datasets:[{data:pd.data, borderColor:"#e2a336", backgroundColor:"#e2a336", tension:.3, fill:false}]}, options:{plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}}}});
+    mkChart("c_mnTrend", {type:"line", data:{labels:pd.labels, datasets:[{data:pd.data, borderColor:"#e2a336", backgroundColor:"#e2a336", tension:.3, fill:false}]}, options:{maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}}}});
   }
   if(mn2026 && mn2026.total>0){
     mkChart("c_mnOutcome", {type:"doughnut", data:{labels:Object.keys(mn2026.outcome_dist), datasets:[{data:Object.values(mn2026.outcome_dist), backgroundColor:barColors(Object.keys(mn2026.outcome_dist).length)}]}, options:{plugins:{legend:{position:"bottom",labels:{boxWidth:10,font:{size:10}}}}}});
