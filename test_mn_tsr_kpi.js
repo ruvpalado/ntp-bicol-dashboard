@@ -88,6 +88,13 @@ check("year-specific headings are used", () => {
   assert.ok(headings.includes("MN 2025"));
   assert.ok(!headings.includes("Outcome Status"));
 });
+check("MN trend uses the same 280px chart height as the adjacent pie", () => {
+  const canvas = window.document.getElementById("c_mnTrend");
+  assert.ok(canvas.parentElement.classList.contains("chart-fill-wrap"));
+  assert.equal(window.getComputedStyle(canvas.parentElement).height, "280px");
+  assert.equal(chartConfigs.get("c_mnTrend").options.maintainAspectRatio, false);
+  assert.ok(canvas.closest(".panel").nextElementSibling.querySelector("#c_mnOutcome"));
+});
 check("2026 pie uses the dedicated 2026 aggregate", () => {
   const chart = chartConfigs.get("c_mnOutcome");
   assert.deepEqual(Array.from(chart.data.datasets[0].data), [1, 1]);
