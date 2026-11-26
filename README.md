@@ -196,6 +196,21 @@ remain empty until this rebuild. Verify the 3rd/4th Quarter selections against t
 The TPT Monthly Average now divides the reporting total by the full 12-month calendar rather than
 the old fixed six-month window; it is not an elapsed-month or selected-quarter average.
 
+## Shared-name facilities in municipality CNR
+
+Bato RHU (Catanduanes / Camarines Sur) and San Fernando RHU (Camarines Sur / Masbate)
+share facility names. Municipality CNR includes each facility in both provinces' geography,
+but counts only the cases owned by the selected province, matching its facility page.
+This applies to full totals and month/quarter slices.
+
+Existing published totals must be rebuilt after this fix: deploy the updated pipeline to the
+consolidation server as well as the dashboard, then re-upload one area's **current, unchanged**
+workbook to its matching `/admin` slot. Keep the other stored files intact. Redeploying the
+dashboard alone does not recompute saved KPI data.
+
+Run `node test_bato_cnr_province_isolation.js` for synthetic shared-name cases, reversed province
+majorities, period totals and the rendered Bato CNR dropdown flow.
+
 ## Running the tests
 
 Run `node test_full_year_period_filter.js` for full-year CNR/MN/TPT/TSR/TPT Cohort period filtering,

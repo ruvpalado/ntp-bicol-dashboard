@@ -3724,13 +3724,19 @@ function runPipeline(workbook, progressCb) {
     if (caseProvince === undefined) caseProvince = province;
     let facsHere;
     if (municipality) {
-      facsHere = Object.keys(fac2muni).filter(f => fac2muni[f] === municipality && resolveProv(f) === caseProvince);
+      facsHere = Object.keys(fac2muni).filter(f => fac2muni[f] === municipality && facilityProvinces(f).includes(caseProvince));
     } else {
-      facsHere = Object.keys(fac2muni).filter(f => resolveProv(f) === caseProvince);
+      facsHere = Object.keys(fac2muni).filter(f => facilityProvinces(f).includes(caseProvince));
     }
     if (!facsHere.length) return null;
     const set = new Set(facsHere);
-    return rows.filter(r => set.has(String(r["Screening/Diagnosing Health Facility"]).trim().toUpperCase()));
+    return rows.filter(r => {
+      const f = String(r["Screening/Diagnosing Health Facility"]).trim().toUpperCase();
+      // Bato and San Fernando RHUs share their names across provinces. Include each in both
+      // catchments (as the dropdown does), but isolate its cases by the row's owning province,
+      // just like the corresponding facility node. A name-only filter would combine both RHUs.
+      return set.has(f) && (!AMBIGUOUS_FACILITY_PROVINCES[f] || r.Province === caseProvince);
+    });
   }
 
   function nodeFor(province, municipality, facility, caseProvince) {
